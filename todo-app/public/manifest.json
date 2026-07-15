@@ -1,6 +1,6 @@
 {
-  "name": "Projects Dashboard",
-  "short_name": "Projects",
+  "name": "twodew",
+  "short_name": "twodew",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#14181E",
