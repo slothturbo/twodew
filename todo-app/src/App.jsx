@@ -35,7 +35,7 @@ const css = `
 ::placeholder{color:var(--muted); opacity:.7;}
 
 .pd-topbar{
-  padding:20px 24px 16px; border-bottom:1px solid var(--line);
+  padding:20px 24px 16px; padding-top:max(20px, env(safe-area-inset-top)); border-bottom:1px solid var(--line);
   display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap;
 }
 .pd-title{font-family:'Archivo',sans-serif; font-weight:800; font-size:22px; letter-spacing:-0.02em;}
@@ -412,6 +412,10 @@ const css = `
   .pd-back{display:inline-block;}
   .pd-reorder button, .pd-drag-handle{opacity:1;}
   .pd-x{opacity:1;}
+  /* iOS Safari auto-zooms on focus for any field under 16px — this stops that */
+  input[type=text], input[type=email], input[type=date], input[type=number],
+  textarea, select, [contenteditable]{font-size:16px !important;}
+  .pd-bubble-edit, .pd-panel-edit, .pd-task-title, .pd-proj-name{font-size:16px !important;}
 }
 @media (prefers-reduced-motion: reduce){
   *{transition:none !important; animation:none !important;}
@@ -1331,20 +1335,21 @@ function ProjectDashboard() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Login gate — email magic link, no password. Same account on any    */
-/*  device sees the same data, since data is scoped to your user id.   */
+/*  Login gate — 6-digit email code, typed in-app (no link to tap,     */
+/*  so it works from the installed home-screen app too).               */
 /* ------------------------------------------------------------------ */
 const gateCss = `
 .pd-gate{
   min-height:100vh; display:flex; align-items:center; justify-content:center;
   background:#14181E; color:#E8ECF1; font-family:'Inter',system-ui,sans-serif; padding:24px;
+  padding-top:max(24px, env(safe-area-inset-top));
 }
 .pd-gate-card{width:100%; max-width:340px; text-align:center;}
 .pd-gate-title{font-family:'Archivo',sans-serif; font-weight:800; font-size:22px; margin-bottom:6px;}
 .pd-gate-title span{color:#E9B44C;}
 .pd-gate-sub{color:#8C96A3; font-size:13px; margin-bottom:22px;}
 .pd-gate-input{
-  width:100%; padding:11px 14px; font-size:14px; border:1px solid #2C343E; border-radius:10px;
+  width:100%; padding:11px 14px; font-size:16px; border:1px solid #2C343E; border-radius:10px;
   background:#212933; color:#E8ECF1; margin-bottom:10px;
 }
 .pd-gate-input:focus{outline:none; border-color:#E9B44C;}
@@ -1387,8 +1392,6 @@ function LoginGate() {
     });
     setBusy(false);
     if (error) setError(error.message);
-    // On success, the App component's onAuthStateChange listener picks up the
-    // new session automatically — nothing else to do here.
   };
 
   return (
@@ -1398,7 +1401,7 @@ function LoginGate() {
         <div className="pd-gate-title">Projects<span>.</span></div>
         <div className="pd-gate-sub">
           {sent
-            ? "Enter the 6-digit code from your email — right here in this window."
+            ? "Enter the code from your email — right here in this window."
             : "Sign in with your email — no password needed."}
         </div>
         {!sent ? (
@@ -1413,10 +1416,10 @@ function LoginGate() {
         ) : (
           <>
             <input className="pd-gate-input" type="text" inputMode="numeric" placeholder="123456" value={code}
-              autoFocus maxLength={6}
+              autoFocus
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
               onKeyDown={(e) => { if (e.key === "Enter") verifyCode(); }} />
-            <button className="pd-gate-btn" onClick={verifyCode} disabled={busy || code.trim().length < 6}>
+            <button className="pd-gate-btn" onClick={verifyCode} disabled={busy || code.trim().length < 4}>
               {busy ? "Verifying…" : "Verify & sign in"}
             </button>
           </>
