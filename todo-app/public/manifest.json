@@ -1,0 +1,11 @@
+{
+  "name": "Projects Dashboard",
+  "short_name": "Projects",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#14181E",
+  "theme_color": "#14181E",
+  "icons": [
+    { "src": "/icon.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
