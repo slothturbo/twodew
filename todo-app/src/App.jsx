@@ -342,6 +342,21 @@ const css = `
 }
 .pd-viewtoggle button.active{background:var(--raised); color:var(--accent);}
 
+/* ---- export / import ---- */
+.pd-datarow{display:flex; gap:14px; margin-bottom:14px;}
+.pd-data-btn{
+  background:none; border:none; color:var(--muted); cursor:pointer; padding:0;
+  font-family:'IBM Plex Mono',monospace; font-size:11px; text-decoration:underline; text-underline-offset:2px;
+}
+.pd-data-btn:hover{color:var(--accent);}
+.pd-import-note{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); margin:-8px 0 14px;}
+.pd-import-note.err{color:var(--danger);}
+.pd-import-banner{
+  background:var(--card); border:1px solid var(--accent); border-radius:12px; padding:12px; margin-bottom:14px;
+}
+.pd-import-banner p{font-size:13px; margin-bottom:10px; line-height:1.4;}
+.pd-import-banner .pd-form-row{gap:8px;}
+
 /* ---- timeline (Gantt) ---- */
 .pd-tl{margin-top:4px;}
 .pd-tl-axis{
@@ -976,6 +991,9 @@ function ProjectDashboard() {
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [savedFlash, setSavedFlash] = useState("");
   const [view, setView] = useState("list");
+  const [pendingImport, setPendingImport] = useState(null);
+  const [importNote, setImportNote] = useState("");
+  const importFileRef = useRef(null);
   const [dragTaskId, setDragTaskId] = useState(null);
   const [dragOverTaskId, setDragOverTaskId] = useState(null);
   const [dragNoteId, setDragNoteId] = useState(null);
@@ -1048,6 +1066,43 @@ function ProjectDashboard() {
     setSelectedId(null); setDeleteArmed(false);
   };
 
+  // Move all projects/tasks/notes out as a plain .json file — the counterpart
+  // to the Import button, used to carry data between different deployments
+  // of this app (e.g. from here into a standalone copy, or as a backup).
+  const exportData = () => {
+    const blob = new Blob([JSON.stringify({ projects }, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `projects-export-${todayISO()}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const openImportPicker = () => { setImportNote(""); importFileRef.current?.click(); };
+
+  const onImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const incoming = (parsed.projects || []).map(migrate);
+      if (!incoming.length) { setImportNote("That file has no projects in it."); return; }
+      setPendingImport(incoming);
+    } catch (err) {
+      setImportNote("Couldn't read that file — make sure it's a projects-export .json file.");
+    }
+  };
+
+  const confirmImport = () => {
+    const n = pendingImport.length;
+    update(() => pendingImport);
+    setPendingImport(null);
+    setImportNote(`Imported ${n} project${n !== 1 ? "s" : ""}.`);
+    setTimeout(() => setImportNote(""), 3000);
+  };
+
   if (!loaded) return (<div className="pd-app"><style>{css}</style><div className="pd-loading">loading your projects…</div></div>);
 
   const selColor = selected ? colorOf(selected) : null;
@@ -1077,6 +1132,22 @@ function ProjectDashboard() {
             <button className={view === "list" ? "active" : ""} onClick={() => setView("list")}>list</button>
             <button className={view === "timeline" ? "active" : ""} onClick={() => setView("timeline")}>timeline</button>
           </div>
+
+          <div className="pd-datarow">
+            <button className="pd-data-btn" onClick={exportData}>Export data</button>
+            <button className="pd-data-btn" onClick={openImportPicker}>Import data</button>
+            <input ref={importFileRef} type="file" accept="application/json" style={{ display: "none" }} onChange={onImportFile} />
+          </div>
+          {importNote && <div className={`pd-import-note ${pendingImport ? "" : "err"}`}>{importNote}</div>}
+          {pendingImport && (
+            <div className="pd-import-banner">
+              <p>Import {pendingImport.length} project{pendingImport.length !== 1 ? "s" : ""}? This replaces everything currently in this app.</p>
+              <div className="pd-form-row">
+                <button className="pd-btn" onClick={confirmImport}>Replace with imported data</button>
+                <button className="pd-btn ghost" onClick={() => setPendingImport(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
 
           {adding ? (
             <div className="pd-form">
@@ -1284,23 +1355,40 @@ const gateCss = `
 .pd-gate-btn:disabled{opacity:.6; cursor:default;}
 .pd-gate-msg{font-size:12px; color:#8C96A3; margin-top:14px; font-family:'IBM Plex Mono',monospace;}
 .pd-gate-msg.err{color:#E06A87;}
+.pd-gate-link{background:none; border:none; color:#E9B44C; cursor:pointer; font-family:inherit; font-size:inherit; text-decoration:underline; padding:0;}
+.pd-gate-link:disabled{opacity:.5; cursor:default;}
 `;
 
 function LoginGate() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const sendLink = async () => {
+  const sendCode = async () => {
     if (!email.trim()) return;
     setBusy(true); setError("");
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: window.location.origin },
+      options: { shouldCreateUser: true },
     });
     setBusy(false);
     if (error) setError(error.message); else setSent(true);
+  };
+
+  const verifyCode = async () => {
+    if (!code.trim()) return;
+    setBusy(true); setError("");
+    const { error } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: code.trim(),
+      type: "email",
+    });
+    setBusy(false);
+    if (error) setError(error.message);
+    // On success, the App component's onAuthStateChange listener picks up the
+    // new session automatically — nothing else to do here.
   };
 
   return (
@@ -1309,20 +1397,32 @@ function LoginGate() {
       <div className="pd-gate-card">
         <div className="pd-gate-title">Projects<span>.</span></div>
         <div className="pd-gate-sub">
-          {sent ? "Check your email for the sign-in link." : "Sign in with your email — no password needed."}
+          {sent
+            ? "Enter the 6-digit code from your email — right here in this window."
+            : "Sign in with your email — no password needed."}
         </div>
-        {!sent && (
+        {!sent ? (
           <>
             <input className="pd-gate-input" type="email" placeholder="you@example.com" value={email}
               onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") sendLink(); }} />
-            <button className="pd-gate-btn" onClick={sendLink} disabled={busy}>
-              {busy ? "Sending…" : "Send sign-in link"}
+              onKeyDown={(e) => { if (e.key === "Enter") sendCode(); }} />
+            <button className="pd-gate-btn" onClick={sendCode} disabled={busy}>
+              {busy ? "Sending…" : "Send sign-in code"}
+            </button>
+          </>
+        ) : (
+          <>
+            <input className="pd-gate-input" type="text" inputMode="numeric" placeholder="123456" value={code}
+              autoFocus maxLength={6}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+              onKeyDown={(e) => { if (e.key === "Enter") verifyCode(); }} />
+            <button className="pd-gate-btn" onClick={verifyCode} disabled={busy || code.trim().length < 6}>
+              {busy ? "Verifying…" : "Verify & sign in"}
             </button>
           </>
         )}
         {error && <div className="pd-gate-msg err">{error}</div>}
-        {sent && <div className="pd-gate-msg">Opened the same link on another device? It'll sign you in there too.</div>}
+        {sent && <div className="pd-gate-msg">Didn't get it? <button className="pd-gate-link" onClick={sendCode} disabled={busy}>Send a new code</button></div>}
       </div>
     </div>
   );
