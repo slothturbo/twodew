@@ -205,6 +205,7 @@ button{touch-action:manipulation;}
 .pd-task-title:focus{outline:none;}
 .pd-task-title.done{color:var(--muted); text-decoration:line-through;}
 .pd-task-due{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); white-space:nowrap;}
+.pd-task-meta{display:flex; align-items:center; gap:8px;}
 .pd-x{
   background:none; border:none; color:var(--muted); cursor:pointer; font-size:16px;
   opacity:0; transition:opacity .15s ease; padding:8px 10px; margin:-6px -4px;
@@ -423,32 +424,15 @@ button{touch-action:manipulation;}
 }
 
 /* ---- FAB + composer ---- */
-.pd-fab{
-  display:none; position:fixed; right:18px; z-index:90;
-  width:56px; height:56px; border-radius:50%; border:none; background:var(--accent); color:var(--accent-ink);
-  font-size:26px; font-weight:600; cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,0.4);
+.pd-inputrow{display:flex; gap:8px; align-items:center;}
+.pd-quickadd-row{margin-top:22px;}
+.pd-send{
+  display:none; width:44px; height:44px; border-radius:50%; border:none; flex-shrink:0;
+  background:var(--accent); color:var(--accent-ink); font-size:18px; font-weight:700; cursor:pointer;
   align-items:center; justify-content:center;
 }
-.pd-fab:active{transform:scale(.94);}
-.pd-composer{
-  position:fixed; left:0; right:0; z-index:95; background:var(--raised);
-  border-top:1px solid var(--line); padding:10px 12px;
-  padding-bottom:max(10px, env(safe-area-inset-bottom));
-  display:flex; flex-direction:column; gap:8px; animation:pd-toast-in .18s ease;
-}
-.pd-composer-modes{display:flex; gap:6px;}
-.pd-composer-modes button{
-  background:none; border:1px solid var(--line); border-radius:999px; color:var(--muted);
-  font-family:'IBM Plex Mono',monospace; font-size:11px; padding:6px 12px; cursor:pointer;
-}
-.pd-composer-modes button.active{border-color:var(--accent); color:var(--accent);}
-.pd-composer-row{display:flex; gap:8px;}
-.pd-composer input{
-  flex:1; padding:11px 14px; font-size:16px; font-family:'Inter',sans-serif;
-  border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink);
-}
-.pd-composer input:focus{outline:none; border-color:var(--accent);}
-.pd-composer .pd-x{opacity:1; font-size:20px; padding:6px 10px; margin:0;}
+.pd-send:active{transform:scale(.92);}
+.pd-send:disabled{opacity:.4;}
 
 /* ---- mobile ---- */
 @media (max-width: 860px){
@@ -459,16 +443,31 @@ button{touch-action:manipulation;}
   }
   .pd-left{transform:translateX(0); z-index:1;}
   .pd-right{transform:translateX(100%); z-index:2;}
+  .pd-right.edge-dragging{transition:none !important;}
   .pd-app.detail-open .pd-left{transform:translateX(-24%);}
   .pd-app.detail-open .pd-right{transform:translateX(0);}
+  .pd-send{display:flex;}
   .pd-back{display:inline-block;}
   .pd-reorder{display:none;}
   .pd-drag-handle, .pd-x{opacity:1;}
-  .pd-fab{display:flex;}
-  /* iOS zooms on focus for fields under 16px — keep every editable at 16px */
+  /* Task rows: tighter padding/gaps (Material list spec: 8dp row padding, 4dp tight gaps),
+     and due/date/delete pinned to their own line so wrap is predictable, not ragged. */
+  .pd-task{padding:9px 4px; gap:6px;}
+  .pd-task-title{padding:2px 0;}
+  .pd-task-meta{flex-basis:100%; justify-content:flex-end; margin-left:56px; gap:6px; margin-top:-2px;}
+  .pd-task-due{font-size:10.5px;}
+  .pd-dp-btn{padding:4px 8px; min-height:30px; font-size:11px;}
+  .pd-x{padding:6px 6px; margin:-4px -2px;}
+  .pd-drag-handle{padding:6px 2px; margin:-6px 0;}
+  .pd-quickadd-row{margin-top:16px;}
+  .pd-inputrow{margin-top:0;}
+  /* Zoom is disabled app-wide (see zoom-lock effect), so fields no longer need to
+     stay at 16px purely to dodge iOS auto-zoom — task titles get a touch smaller
+     for density; comfortable typing fields (name/notes/etc) stay at 16px. */
   input[type=text], input[type=email], input[type=date], input[type=number],
   textarea, select, [contenteditable]{font-size:16px !important;}
-  .pd-bubble-edit, .pd-panel-edit, .pd-task-title, .pd-proj-name{font-size:16px !important;}
+  .pd-bubble-edit, .pd-panel-edit, .pd-proj-name{font-size:16px !important;}
+  .pd-task-title{font-size:15px !important;}
   /* bottom sheet note editor */
   .pd-overlay{align-items:flex-end; padding:0;}
   .pd-panel{width:100%; max-width:100%; border-radius:16px 16px 0 0; border-left:none; border-right:none; border-bottom:none; animation:pd-sheet-in .22s cubic-bezier(.2,.8,.2,1);}
@@ -947,16 +946,21 @@ function Bubble({ note, color, isMobile, onSave, onDelete, dragProps, touchReord
   const panelRef = useRef(null);
   const dragState = useRef(null);
   const prevFocus = useRef(null);
+  const kb = useKeyboardInset();
   const isLong = htmlToPlain(note.text).length > 160 || /<img/i.test(note.text);
 
   useEffect(() => {
     if (panelOpen && panelRef.current) {
       prevFocus.current = document.activeElement;
       panelRef.current.innerHTML = note.text;
-      panelRef.current.focus();
-      const range = document.createRange();
-      range.selectNodeContents(panelRef.current); range.collapse(false);
-      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      // Desktop: jump straight into editing. Mobile: open the sheet calmly first —
+      // autofocus would summon the keyboard mid-animation and shove the sheet off-screen.
+      if (!isMobile) {
+        panelRef.current.focus();
+        const range = document.createRange();
+        range.selectNodeContents(panelRef.current); range.collapse(false);
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelOpen]);
@@ -1051,9 +1055,13 @@ function Bubble({ note, color, isMobile, onSave, onDelete, dragProps, touchReord
       </div>
 
       {panelOpen && (
-        <div className="pd-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) commitPanel(); }}>
+        <div className="pd-overlay" style={isMobile ? { paddingBottom: kb } : undefined}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) commitPanel(); }}>
           <div className={`pd-panel ${fullscreen ? "fullscreen" : ""}`} role="dialog" aria-modal="true" aria-label="Edit note"
-            style={!fullscreen ? { height: panelHeight } : undefined}>
+            style={{
+              ...(!fullscreen ? { height: panelHeight } : {}),
+              ...(isMobile ? { maxHeight: `calc(100dvh - ${kb + 8}px)` } : {}),
+            }}>
             <div className="pd-panel-header">
               <div className="pd-toolbar" onMouseDown={(e) => e.preventDefault()}>
                 <ToolbarButtons cmd={panelCmd} />
@@ -1157,9 +1165,11 @@ function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle
         <input className={`pd-task-title ${task.done ? "done" : ""}`} value={task.title}
           onChange={(e) => onTitle(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.target.blur(); }} aria-label="Task title" />
-        {due && <span className={`pd-task-due ${due.overdue ? "overdue" : ""}`}>{due.text}</span>}
-        {!completed && <DatePicker value={task.deadline} onChange={onDeadline} />}
-        <button className="pd-x" aria-label="Delete task" onClick={onDelete}>×</button>
+        <div className="pd-task-meta">
+          {due && <span className={`pd-task-due ${due.overdue ? "overdue" : ""}`}>{due.text}</span>}
+          {!completed && <DatePicker value={task.deadline} onChange={onDeadline} />}
+          <button className="pd-x" aria-label="Delete task" onClick={onDelete}>×</button>
+        </div>
       </div>
     </li>
   );
@@ -1182,9 +1192,6 @@ function ProjectDashboard() {
   const [pendingImport, setPendingImport] = useState(null);
   const [importNote, setImportNote] = useState("");
   const [toast, setToast] = useState(null);
-  const [composerOpen, setComposerOpen] = useState(false);
-  const [composerMode, setComposerMode] = useState("task");
-  const [composerText, setComposerText] = useState("");
   const [dragTaskId, setDragTaskId] = useState(null);
   const [dragOverTaskId, setDragOverTaskId] = useState(null);
   const [dragNoteId, setDragNoteId] = useState(null);
@@ -1192,6 +1199,18 @@ function ProjectDashboard() {
   const [touchDragId, setTouchDragId] = useState(null);
 
   const isMobile = useIsMobile();
+
+  // Lock zoom for a native-app feel. Note for accessibility: this removes the
+  // user's ability to pinch-zoom text, which WCAG normally recommends against —
+  // acceptable tradeoff here since every field already renders at 16px+.
+  useEffect(() => {
+    let meta = document.querySelector('meta[name="viewport"]');
+    const prev = meta ? meta.getAttribute("content") : null;
+    if (!meta) { meta = document.createElement("meta"); meta.name = "viewport"; document.head.appendChild(meta); }
+    meta.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover");
+    return () => { if (prev !== null) meta.setAttribute("content", prev); };
+  }, []);
+
   const kbInset = useKeyboardInset();
   const saveTimer = useRef(null);
   const flashTimer = useRef(null);
@@ -1396,17 +1415,36 @@ function ProjectDashboard() {
     window.addEventListener("touchcancel", end);
   }, [update]);
 
-  /* ---- edge swipe back (mobile) ---- */
+  /* ---- edge swipe back (mobile) — pane follows the finger, velocity decides ---- */
   const edge = useRef(null);
+  const [edgeDx, setEdgeDx] = useState(0);
+  const [edgeDrag, setEdgeDrag] = useState(false);
   const onDetailTouchStart = (e) => {
-    if (!isMobile) return;
+    if (!isMobile || !selectedIdRef.current) return;
     const t = e.touches[0];
-    if (t.clientX < 28) edge.current = { x: t.clientX };
+    if (t.clientX < 36) edge.current = { x: t.clientX, y: t.clientY, t: Date.now(), active: null };
   };
-  const onDetailTouchEnd = (e) => {
-    if (!isMobile || !edge.current) return;
-    const t = e.changedTouches[0];
-    if (t.clientX - edge.current.x > 70) setSelectedId(null);
+  const onDetailTouchMove = (e) => {
+    if (!edge.current) return;
+    const t = e.touches[0];
+    const dx = t.clientX - edge.current.x;
+    const dy = t.clientY - edge.current.y;
+    if (edge.current.active === null) {
+      if (dx > 10 && Math.abs(dx) > Math.abs(dy)) { edge.current.active = true; setEdgeDrag(true); }
+      else if (Math.abs(dy) > 10) edge.current.active = false;
+    }
+    if (edge.current.active) setEdgeDx(Math.max(0, dx));
+  };
+  const onDetailTouchEnd = () => {
+    if (!edge.current) return;
+    if (edge.current.active) {
+      const dt = Math.max(1, Date.now() - edge.current.t);
+      const velocity = edgeDx / dt; // px per ms
+      const w = window.innerWidth;
+      setEdgeDrag(false);
+      if (edgeDx > w * 0.3 || (edgeDx > 50 && velocity > 0.45)) { setEdgeDx(0); setSelectedId(null); }
+      else setEdgeDx(0);
+    }
     edge.current = null;
   };
 
@@ -1450,11 +1488,6 @@ function ProjectDashboard() {
   const activeTasks = selected ? selected.tasks.filter((t) => !t.done) : [];
   const completedTasks = selected ? selected.tasks.filter((t) => t.done) : [];
 
-  const submitComposer = () => {
-    const ok = composerMode === "task" ? addTaskTitled(composerText) : addNoiseText(composerText);
-    if (ok) setComposerText("");
-  };
-
   return (
     <div className={`pd-app ${selected ? "detail-open" : ""}`}>
       <style>{css}</style>
@@ -1472,7 +1505,7 @@ function ProjectDashboard() {
       <div className="pd-body">
         {/* left: dashboard */}
         <div className="pd-left">
-          <input ref={searchRef} className="pd-search" placeholder="Search projects, tasks, notes…  ( / )"
+          <input ref={searchRef} className="pd-search" enterKeyHint="search" placeholder="Search projects, tasks, notes…  ( / )"
             value={query} onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Escape") { setQuery(""); e.target.blur(); } }} />
 
@@ -1499,13 +1532,13 @@ function ProjectDashboard() {
 
           {adding ? (
             <div className="pd-form">
-              <input type="text" placeholder="Project name" value={newProj.name} autoFocus
+              <input type="text" placeholder="Project name" value={newProj.name} autoFocus enterKeyHint="next"
                 onChange={(e) => setNewProj({ ...newProj, name: e.target.value })}
                 onKeyDown={(e) => { if (e.key === "Enter") addProject(); if (e.key === "Escape") setAdding(false); }} />
-              <input type="text" placeholder="Client name" value={newProj.client}
+              <input type="text" placeholder="Client name" value={newProj.client} enterKeyHint="next"
                 onChange={(e) => setNewProj({ ...newProj, client: e.target.value })}
                 onKeyDown={(e) => { if (e.key === "Enter") addProject(); }} />
-              <input type="text" placeholder="Location" value={newProj.location}
+              <input type="text" placeholder="Location" value={newProj.location} enterKeyHint="done"
                 onChange={(e) => setNewProj({ ...newProj, location: e.target.value })}
                 onKeyDown={(e) => { if (e.key === "Enter") addProject(); }} />
               <div className="pd-form-label">Start date</div>
@@ -1552,7 +1585,9 @@ function ProjectDashboard() {
         </div>
 
         {/* right: detail */}
-        <div className="pd-right" onTouchStart={onDetailTouchStart} onTouchEnd={onDetailTouchEnd}>
+        <div className={`pd-right ${edgeDrag ? "edge-dragging" : ""}`}
+          style={edgeDx > 0 ? { transform: `translateX(${edgeDx}px)` } : undefined}
+          onTouchStart={onDetailTouchStart} onTouchMove={onDetailTouchMove} onTouchEnd={onDetailTouchEnd}>
           {!selected ? (
             <p className="pd-empty">Select a project to see its tasks and brain noises.</p>
           ) : (
@@ -1593,9 +1628,15 @@ function ProjectDashboard() {
               </div>
               <div className="pd-progressbar"><div className="pd-progressfill" style={{ width: `${selPct ?? 0}%`, background: selColor.fg }} /></div>
 
-              <input ref={quickAddRef} className="pd-quickadd" placeholder="Add a task and press Enter…  ( n )"
-                value={taskInput} onChange={(e) => setTaskInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && addTaskTitled(taskInput)) setTaskInput(""); }} />
+              <div className="pd-inputrow pd-quickadd-row">
+                <input ref={quickAddRef} className="pd-quickadd" style={{ marginTop: 0 }} enterKeyHint="send"
+                  placeholder="Add a task and press Enter…  ( n )"
+                  value={taskInput} onChange={(e) => setTaskInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && addTaskTitled(taskInput)) setTaskInput(""); }} />
+                <button className="pd-send" aria-label="Add task" disabled={!taskInput.trim()}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => { if (addTaskTitled(taskInput)) setTaskInput(""); }}>↑</button>
+              </div>
 
               {selected.tasks.length === 0 ? (
                 <p className="pd-empty">Add your first task above — progress starts counting from there.</p>
@@ -1633,9 +1674,15 @@ function ProjectDashboard() {
               )}
 
               <div className="pd-section-label">Brain Noises</div>
-              <input className="pd-noise-input" placeholder="Drop a thought and press Enter…"
-                value={noiseInput} onChange={(e) => setNoiseInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && addNoiseText(noiseInput)) setNoiseInput(""); }} />
+              <div className="pd-inputrow">
+                <input className="pd-noise-input" style={{ flex: 1 }} enterKeyHint="send"
+                  placeholder="Drop a thought and press Enter…"
+                  value={noiseInput} onChange={(e) => setNoiseInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && addNoiseText(noiseInput)) setNoiseInput(""); }} />
+                <button className="pd-send" aria-label="Add thought" disabled={!noiseInput.trim()}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => { if (addNoiseText(noiseInput)) setNoiseInput(""); }}>↑</button>
+              </div>
               {selected.notes.length === 0 ? (
                 <p className="pd-empty">Empty head. Add thoughts, doubts, ideas — one bubble each.</p>
               ) : (
@@ -1656,37 +1703,16 @@ function ProjectDashboard() {
                 </div>
               )}
               <div className="pd-saved">{savedFlash}</div>
-              <div style={{ height: isMobile ? 96 : 0 }} />
+              <div style={{ height: isMobile ? 24 : 0 }} />
             </>
           )}
         </div>
       </div>
 
-      {/* FAB + composer (mobile detail view) */}
-      {isMobile && selected && !composerOpen && (
-        <button className="pd-fab" style={{ bottom: `calc(18px + max(0px, env(safe-area-inset-bottom)))` }}
-          aria-label="Add task or thought"
-          onClick={() => { setComposerOpen(true); setComposerMode("task"); }}>+</button>
-      )}
-      {isMobile && selected && composerOpen && (
-        <div className="pd-composer" style={{ bottom: kbInset }}>
-          <div className="pd-composer-modes">
-            <button className={composerMode === "task" ? "active" : ""} onClick={() => setComposerMode("task")}>Task</button>
-            <button className={composerMode === "noise" ? "active" : ""} onClick={() => setComposerMode("noise")}>Thought</button>
-          </div>
-          <div className="pd-composer-row">
-            <input autoFocus placeholder={composerMode === "task" ? "New task…" : "New thought…"}
-              value={composerText} onChange={(e) => setComposerText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") submitComposer(); if (e.key === "Escape") setComposerOpen(false); }} />
-            <button className="pd-x" aria-label="Close" onClick={() => { setComposerOpen(false); setComposerText(""); }}>×</button>
-          </div>
-        </div>
-      )}
-
       {/* undo toast */}
       {toast && (
         <div className="pd-toast" role="status"
-          style={{ bottom: `calc(${kbInset + (isMobile ? 90 : 24)}px + max(0px, env(safe-area-inset-bottom)))` }}>
+          style={{ bottom: `calc(${kbInset + 24}px + max(0px, env(safe-area-inset-bottom)))` }}>
           <span>{toast.msg}</span>
           <button onClick={runUndo}>Undo</button>
         </div>
@@ -1767,7 +1793,7 @@ function LoginGate() {
         </div>
         {!sent ? (
           <>
-            <input className="pd-gate-input" type="email" placeholder="you@example.com" value={email}
+            <input className="pd-gate-input" type="email" enterKeyHint="send" placeholder="you@example.com" value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") sendCode(); }} />
             <button className="pd-gate-btn" onClick={sendCode} disabled={busy}>
@@ -1776,7 +1802,7 @@ function LoginGate() {
           </>
         ) : (
           <>
-            <input className="pd-gate-input" type="text" inputMode="numeric" placeholder="123456" value={code}
+            <input className="pd-gate-input" type="text" inputMode="numeric" enterKeyHint="done" placeholder="123456" value={code}
               autoFocus
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
               onKeyDown={(e) => { if (e.key === "Enter") verifyCode(); }} />
