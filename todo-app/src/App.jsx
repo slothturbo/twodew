@@ -1,615 +1,51 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { storage } from "./lib/storage";
 import { supabase } from "./supabaseClient";
+import { css } from "./styles";
+import { textToHtml, htmlToPlain, imageFileToDataURL } from "./lib/html";
+import { useIsMobile, useKeyboardInset, useGreeting } from "./lib/hooks";
+import { Ring } from "./components/Ring";
+import { Bubble } from "./components/Bubble";
+import { CommandPalette } from "./components/CommandPalette";
+import { Sidebar } from "./components/Sidebar";
+import { TodayScreen } from "./screens/Today";
+import { CalendarScreen } from "./screens/Calendar";
+import { BrainScreen } from "./screens/BrainScreen";
+import { StatsScreen } from "./screens/Stats";
+import {
+  uid, pad, todayISO, localDateISO, colorOf, progressOf, dueLabel, fmtDate, nextDue, startedLabel,
+  PRIORITY_CYCLE, PRIORITY_COLOR, liveTaskSeconds, formatDuration, currentStreak, weekBars, heatmapCells,
+  parseQuickAdd, attentionSort, moveItem, moveBy, PALETTE, DOW, MONTHS,
+} from "./lib/helpers";
 
 /* ------------------------------------------------------------------ */
 /*  v8 — native-feel: fixed shell, swipes, undo, FAB, bottom sheet     */
 /* ------------------------------------------------------------------ */
 const STORAGE_KEY = "projects-data-v1";
 const OLD_HUES = ["#2E6BE6", "#0E8A7B", "#7A4FBF", "#C77D0A", "#C74A6B", "#3D7A2E"];
-const PALETTE = [
-  { fg: "#8FB4FF", bg: "rgba(143,180,255,0.09)" },
-  { fg: "#7DD8C6", bg: "rgba(125,216,198,0.09)" },
-  { fg: "#C2A6F5", bg: "rgba(194,166,245,0.09)" },
-  { fg: "#F2A6BC", bg: "rgba(242,166,188,0.09)" },
-  { fg: "#ABDB8C", bg: "rgba(171,219,140,0.09)" },
-  { fg: "#8AD2EA", bg: "rgba(138,210,234,0.09)" },
+const NAV_ITEMS = [
+  { key: "today", label: "Today", icon: "today" },
+  { key: "brain", label: "Brain", icon: "brain" },
+  { key: "projects", label: "Projects", icon: "projects" },
+  { key: "calendar", label: "Calendar", icon: "calendar" },
+  { key: "stats", label: "Stats", icon: "stats" },
 ];
-const DOW = ["S", "M", "T", "W", "T", "F", "S"];
-const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-
-const css = `
-@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
-
-:root{
-  --bg:#14181E; --card:#1B2129; --raised:#212933; --ink:#E8ECF1; --muted:#8C96A3;
-  --line:#2C343E; --accent:#E9B44C; --accent-ink:#1A1300; --danger:#E06A87; --ok:#7DD8A6;
-  color-scheme: dark;
-}
-*{box-sizing:border-box; margin:0; padding:0;}
-
-/* ---- native-feel shell: app is fixed to the viewport, only inner panes scroll ---- */
-.pd-app{
-  font-family:'Inter',system-ui,sans-serif; color:var(--ink);
-  background:var(--bg); position:fixed; inset:0; display:flex; flex-direction:column;
-  overscroll-behavior:none; -webkit-tap-highlight-color:transparent;
-  user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
-}
-input, textarea, select, [contenteditable], .pd-bubble-content{
-  user-select:text; -webkit-user-select:text;
-}
-::selection{background:var(--accent); color:var(--accent-ink);}
-::placeholder{color:var(--muted); opacity:.7;}
-button{touch-action:manipulation;}
-.pd-press:active{transform:scale(.97); filter:brightness(1.15);}
-
-.pd-topbar{
-  padding:20px 24px 16px; padding-top:max(20px, env(safe-area-inset-top)); border-bottom:1px solid var(--line);
-  display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; flex-shrink:0;
-}
-.pd-title{font-family:'Archivo',sans-serif; font-weight:800; font-size:22px; letter-spacing:-0.02em;}
-.pd-title span{color:var(--accent);}
-.pd-overall{display:flex; align-items:center; gap:12px; min-width:180px; flex:1; max-width:420px;}
-.pd-overall-bar{flex:1; height:6px; background:var(--raised); border-radius:3px; overflow:hidden;}
-.pd-overall-fill{height:100%; background:var(--accent); border-radius:3px; transition:width .6s ease;}
-.pd-overall-label{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted); white-space:nowrap;}
-
-.pd-body{flex:1; display:flex; min-height:0; position:relative; overflow:hidden;}
-.pd-left{
-  width:380px; min-width:320px; border-right:1px solid var(--line); overflow-y:auto; padding:16px;
-  -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
-}
-.pd-right{
-  flex:1; overflow-y:auto; padding:24px; background:var(--card);
-  -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
-}
-
-/* ---- search ---- */
-.pd-search{
-  width:100%; padding:9px 12px; font-size:14px; font-family:'Inter',sans-serif;
-  border:1px solid var(--line); border-radius:10px; background:var(--raised); color:var(--ink); margin-bottom:12px;
-}
-.pd-search:focus{outline:none; border-color:var(--accent);}
-
-/* ---- project cards ---- */
-.pd-card{
-  border:1px solid var(--line); border-radius:12px;
-  padding:14px; display:flex; gap:14px; align-items:center; cursor:pointer;
-  margin-bottom:10px; transition:border-color .15s ease, transform .08s ease;
-}
-.pd-card:active{transform:scale(.985);}
-.pd-card:hover{border-color:var(--pfg);}
-.pd-card.selected{border-color:var(--pfg); box-shadow:0 0 0 1px var(--pfg);}
-.pd-card:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
-.pd-card-info{flex:1; min-width:0;}
-.pd-card-name{font-weight:600; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.pd-card-client{font-size:12px; color:var(--muted); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.pd-card-meta{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); margin-top:4px;}
-.overdue{color:var(--danger) !important; font-weight:600;}
-.pd-phase{
-  font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:.06em; text-transform:uppercase;
-  border:1px solid var(--pfg); color:var(--pfg); border-radius:999px; padding:1px 7px;
-  display:inline-block; margin-top:5px;
-}
-
-.pd-addproj{
-  width:100%; border:1px dashed var(--line); background:transparent; border-radius:12px;
-  padding:12px; font-size:14px; color:var(--muted); cursor:pointer;
-  font-family:'Inter',sans-serif; transition:border-color .15s ease,color .15s ease;
-}
-.pd-addproj:hover{border-color:var(--accent); color:var(--accent);}
-
-/* ---- detail ---- */
-.pd-back{display:none; background:none; border:none; color:var(--muted); font-size:13px; cursor:pointer; margin-bottom:12px; font-family:'IBM Plex Mono',monospace; padding:8px 8px 8px 0;}
-.pd-detail-head{display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;}
-.pd-proj-name{font-family:'Archivo',sans-serif; font-weight:700; font-size:26px; letter-spacing:-0.02em; border:none; background:transparent; width:100%; color:var(--ink);}
-.pd-proj-name:focus{outline:none; border-bottom:2px solid var(--accent);}
-.pd-meta-grid{display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; align-items:flex-end;}
-.pd-field{display:flex; flex-direction:column; gap:3px;}
-.pd-field label{font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted);}
-.pd-field input[type=text]{
-  font-size:13px; font-family:'Inter',sans-serif; color:var(--ink);
-  border:1px solid var(--line); border-radius:6px; padding:5px 9px; background:var(--raised); min-width:130px;
-}
-.pd-field input:focus{outline:none; border-color:var(--accent);}
-.pd-progressbar{height:8px; background:var(--raised); border-radius:4px; overflow:hidden; margin-top:16px;}
-.pd-progressfill{height:100%; border-radius:4px; transition:width .6s ease;}
-
-/* ---- custom date picker ---- */
-.pd-dp-wrap{position:relative; display:inline-block;}
-.pd-dp-btn{
-  font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink);
-  border:1px solid var(--line); border-radius:6px; padding:8px 10px; background:var(--raised);
-  cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; min-height:36px;
-}
-.pd-dp-btn:hover{border-color:var(--accent);}
-.pd-dp-btn.empty{color:var(--muted);}
-.pd-dp-pop{
-  z-index:200; width:280px; max-width:calc(100vw - 16px);
-  background:var(--raised); border:1px solid var(--line); border-radius:12px; padding:14px;
-  box-shadow:0 12px 32px rgba(0,0,0,0.45); animation:pd-pop .12s ease;
-}
-@keyframes pd-pop{from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:none;}}
-.pd-dp-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
-.pd-dp-month{font-family:'Archivo',sans-serif; font-weight:700; font-size:15px;}
-.pd-dp-nav{display:flex; gap:4px;}
-.pd-dp-nav button{
-  background:none; border:1px solid var(--line); border-radius:6px; width:32px; height:32px;
-  color:var(--ink); cursor:pointer; display:flex; align-items:center; justify-content:center;
-}
-.pd-dp-nav button:hover{border-color:var(--accent); color:var(--accent);}
-.pd-dp-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:2px; text-align:center;}
-.pd-dp-dow{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted); padding:4px 0;}
-.pd-dp-cell{
-  font-family:'IBM Plex Mono',monospace; font-size:12px; padding:8px 0; border-radius:6px;
-  cursor:pointer; background:none; border:none; color:var(--ink); min-height:34px;
-}
-.pd-dp-cell:hover{background:rgba(233,180,76,0.15);}
-.pd-dp-cell.muted{color:var(--muted); opacity:.5;}
-.pd-dp-cell.today{box-shadow:inset 0 0 0 1px var(--accent);}
-.pd-dp-cell.selected{background:var(--accent); color:var(--accent-ink); font-weight:600;}
-.pd-dp-foot{display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid var(--line);}
-.pd-dp-link{background:none; border:none; color:var(--accent); font-size:12px; cursor:pointer; font-family:'Inter',sans-serif; padding:8px;}
-.pd-dp-link:hover{text-decoration:underline;}
-
-/* ---- reorder controls ---- */
-.pd-reorder{display:flex; flex-direction:column; gap:0; flex-shrink:0;}
-.pd-reorder button{
-  background:none; border:none; color:var(--muted); cursor:pointer; padding:0; width:18px; height:14px;
-  display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity .15s ease;
-}
-.pd-reorder button:hover{color:var(--accent);}
-.pd-reorder button:disabled{opacity:0 !important; cursor:default;}
-.pd-drag-handle{
-  cursor:grab; color:var(--muted); opacity:0; transition:opacity .15s ease; flex-shrink:0;
-  touch-action:none; padding:8px 4px; margin:-8px 0;
-}
-.pd-drag-handle:active{cursor:grabbing;}
-
-/* ---- tasks ---- */
-.pd-quickadd{
-  width:100%; margin-top:22px; padding:12px 14px; font-size:15px; font-family:'Inter',sans-serif;
-  border:1px solid var(--line); border-radius:10px; background:var(--raised); color:var(--ink);
-}
-.pd-quickadd:focus{outline:none; border-color:var(--accent);}
-.pd-tasklist{margin-top:14px; list-style:none;}
-.pd-tasksep{
-  font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase;
-  color:var(--muted); padding:12px 6px 4px; border-top:1px solid var(--line); margin-top:6px;
-}
-.pd-task-outer{position:relative; overflow:hidden; border-bottom:1px solid var(--line);}
-.pd-task-bg{
-  position:absolute; inset:0; display:flex; align-items:center; justify-content:space-between;
-  padding:0 18px; font-size:18px; pointer-events:none;
-}
-.pd-task-bg .bg-done{color:var(--ok);} .pd-task-bg .bg-del{color:var(--danger);}
-.pd-task{
-  display:flex; align-items:center; gap:8px; padding:12px 6px; background:var(--card);
-  animation:pd-in .2s ease; flex-wrap:wrap; position:relative;
-  border-top:2px solid transparent; touch-action:pan-y;
-}
-.pd-task.snapback{transition:transform .25s ease;}
-.pd-task:hover .pd-x, .pd-task:hover .pd-reorder button, .pd-task:hover .pd-drag-handle{opacity:1;}
-.pd-task.dragging{opacity:.35;}
-.pd-task.drag-over{border-top-color:var(--accent);}
-.pd-task.completed{opacity:.55;}
-@keyframes pd-in{from{opacity:0; transform:translateY(3px);} to{opacity:1; transform:none;}}
-.pd-check{
-  width:24px; height:24px; border-radius:7px; border:2px solid var(--line); background:transparent;
-  cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center;
-  transition:background .15s ease,border-color .15s ease; padding:0;
-}
-.pd-check svg{opacity:0; transition:opacity .15s ease;}
-.pd-check.done svg{opacity:1;}
-.pd-task-title{flex:1; min-width:120px; font-size:15px; border:none; background:transparent; color:var(--ink); font-family:'Inter',sans-serif; padding:4px 0;}
-.pd-task-title:focus{outline:none;}
-.pd-task-title.done{color:var(--muted); text-decoration:line-through;}
-.pd-task-due{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); white-space:nowrap;}
-.pd-task-meta{display:flex; align-items:center; gap:8px;}
-.pd-x{
-  background:none; border:none; color:var(--muted); cursor:pointer; font-size:16px;
-  opacity:0; transition:opacity .15s ease; padding:8px 10px; margin:-6px -4px;
-}
-.pd-x:focus-visible{opacity:1;}
-
-/* ---- brain noises ---- */
-.pd-section-label{
-  font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.08em;
-  text-transform:uppercase; color:var(--muted); margin:28px 0 8px;
-}
-.pd-noise-input{
-  width:100%; padding:10px 14px; font-size:14px; font-family:'Inter',sans-serif;
-  border:1px solid var(--line); border-radius:20px; background:var(--raised); color:var(--ink);
-}
-.pd-noise-input:focus{outline:none; border-color:var(--accent);}
-.pd-bubbles{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:10px; margin-top:12px;}
-.pd-bubble{
-  position:relative; border:1px solid var(--line); border-radius:14px;
-  padding:10px 30px 10px 30px; font-size:13.5px; line-height:1.5;
-  cursor:pointer; animation:pd-in .2s ease; transition:border-color .15s ease, opacity .15s ease, transform .08s ease;
-}
-.pd-bubble:active{transform:scale(.985);}
-.pd-bubble:hover{border-color:var(--pfg);}
-.pd-bubble:hover .pd-x, .pd-bubble:hover .pd-drag-handle{opacity:1;}
-.pd-bubble.dragging{opacity:.35;}
-.pd-bubble.drag-over{border-top:2px solid var(--accent);}
-.pd-bubble-content{white-space:pre-wrap; overflow:hidden; max-height:4.6em; pointer-events:none;}
-.pd-bubble-content.clamped{display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical;}
-.pd-bubble-content h2{font-family:'Archivo',sans-serif; font-size:16px; font-weight:800; margin-bottom:2px;}
-.pd-bubble-content h3{font-family:'Archivo',sans-serif; font-size:15px; margin-bottom:2px;}
-.pd-bubble-content h4{font-family:'Archivo',sans-serif; font-size:13.5px; font-weight:600; color:var(--muted);}
-.pd-bubble-content ul{padding-left:18px; margin:4px 0;}
-.pd-bubble-content b, .pd-bubble-content strong{font-weight:700;}
-.pd-bubble-content pre{
-  font-family:'IBM Plex Mono',monospace; font-size:12px; white-space:pre-wrap;
-  background:rgba(255,255,255,0.05); border-radius:6px; padding:4px 8px; margin:3px 0;
-}
-.pd-bubble-content img{max-width:100%; border-radius:8px; display:block; margin:6px 0; border:1px solid var(--line);}
-.pd-bubble-content.clamped img{max-height:80px; width:auto;}
-.pd-bubble .pd-x{position:absolute; top:2px; right:2px;}
-.pd-bubble .pd-drag-handle{position:absolute; top:8px; left:4px;}
-
-/* ---- text style (Aa) menu ---- */
-.pd-toolbar{display:flex; gap:2px;}
-.pd-toolbar button{
-  min-width:32px; height:32px; border-radius:6px; border:1px solid transparent; background:none;
-  color:var(--ink); cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center;
-}
-.pd-toolbar button:hover{background:rgba(233,180,76,0.15); border-color:var(--accent);}
-.pd-toolbar .b{font-weight:700;} .pd-toolbar .i{font-style:italic;} .pd-toolbar .u{text-decoration:underline;} .pd-toolbar .s{text-decoration:line-through;}
-.pd-aa-wrap{position:relative;}
-.pd-aa-menu{
-  position:absolute; top:calc(100% + 6px); left:0; z-index:60; min-width:170px;
-  background:var(--raised); border:1px solid var(--line); border-radius:10px; padding:6px;
-  box-shadow:0 12px 32px rgba(0,0,0,0.45); animation:pd-pop .12s ease;
-}
-.pd-aa-menu button{
-  display:block; width:100%; text-align:left; background:none; border:none; color:var(--ink);
-  padding:9px 10px; border-radius:6px; cursor:pointer; font-family:'Inter',sans-serif;
-}
-.pd-aa-menu button:hover{background:rgba(233,180,76,0.15);}
-.pd-aa-title{font-family:'Archivo',sans-serif; font-weight:800; font-size:17px;}
-.pd-aa-heading{font-family:'Archivo',sans-serif; font-weight:700; font-size:15px;}
-.pd-aa-sub{font-family:'Archivo',sans-serif; font-weight:600; font-size:13px;}
-.pd-aa-body{font-size:13px;}
-.pd-aa-mono{font-family:'IBM Plex Mono',monospace; font-size:12px;}
-
-/* ---- note editor: modal on desktop, bottom sheet on mobile ---- */
-.pd-overlay{
-  position:fixed; inset:0; background:rgba(10,12,16,0.6); backdrop-filter:blur(2px);
-  display:flex; align-items:center; justify-content:center; z-index:100; padding:24px;
-  animation:pd-fade .12s ease;
-}
-@keyframes pd-fade{from{opacity:0;} to{opacity:1;}}
-.pd-panel{
-  width:min(640px, 92vw); background:var(--raised); border:1px solid var(--line); border-radius:16px;
-  box-shadow:0 24px 64px rgba(0,0,0,0.5); display:flex; flex-direction:column; overflow:hidden;
-  min-height:220px; animation:pd-pop .14s ease;
-}
-.pd-panel.fullscreen{width:94vw; height:92dvh !important; max-height:92dvh;}
-.pd-panel-header{
-  display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
-  padding:10px 14px; border-bottom:1px solid var(--line); flex-shrink:0; background:var(--raised); z-index:2;
-}
-.pd-panel-actions{display:flex; gap:4px; flex-shrink:0;}
-.pd-panel-actions button{
-  width:34px; height:34px; border-radius:7px; border:1px solid var(--line); background:none;
-  color:var(--ink); cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center;
-}
-.pd-panel-actions button:hover{border-color:var(--accent); color:var(--accent);}
-.pd-panel-body{flex:1; overflow-y:auto; padding:16px 18px; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;}
-.pd-panel-edit{
-  font-size:15px; font-family:'Inter',sans-serif; color:var(--ink); line-height:1.65; min-height:100%;
-}
-.pd-panel-edit:focus{outline:none;}
-.pd-panel-edit h2{font-family:'Archivo',sans-serif; font-size:23px; font-weight:800; margin:6px 0 2px;}
-.pd-panel-edit h3{font-family:'Archivo',sans-serif; font-size:19px; margin:4px 0;}
-.pd-panel-edit h4{font-family:'Archivo',sans-serif; font-size:16px; font-weight:600; margin:4px 0 2px; color:var(--muted);}
-.pd-panel-edit ul{padding-left:20px; margin:6px 0;}
-.pd-panel-edit b, .pd-panel-edit strong{font-weight:700;}
-.pd-panel-edit pre{
-  font-family:'IBM Plex Mono',monospace; font-size:13px; white-space:pre-wrap;
-  background:rgba(255,255,255,0.05); border-radius:8px; padding:8px 10px; margin:6px 0;
-}
-.pd-panel-edit img{max-width:100%; border-radius:8px; display:block; margin:6px 0; border:1px solid var(--line);}
-.pd-resize-handle{
-  flex-shrink:0; height:18px; display:flex; align-items:center; justify-content:center;
-  cursor:ns-resize; touch-action:none; border-top:1px solid var(--line);
-}
-.pd-resize-handle span{width:36px; height:4px; border-radius:2px; background:var(--line);}
-.pd-resize-handle:hover span{background:var(--accent);}
-
-/* ---- phase combobox ---- */
-.pd-combo{position:relative;}
-.pd-combo input{
-  font-size:13px; font-family:'Inter',sans-serif; color:var(--ink);
-  border:1px solid var(--line); border-radius:6px; padding:5px 9px; background:var(--raised); min-width:150px; width:100%;
-}
-.pd-combo input:focus{outline:none; border-color:var(--accent);}
-.pd-combo-pop{
-  position:absolute; top:calc(100% + 4px); left:0; z-index:50; min-width:100%;
-  background:var(--raised); border:1px solid var(--line); border-radius:10px; padding:4px;
-  box-shadow:0 12px 32px rgba(0,0,0,0.45); max-height:200px; overflow-y:auto; animation:pd-pop .12s ease;
-}
-.pd-combo-pop button{
-  display:block; width:100%; text-align:left; background:none; border:none; color:var(--ink);
-  padding:9px; border-radius:6px; cursor:pointer; font-size:13px; font-family:'Inter',sans-serif; white-space:nowrap;
-}
-.pd-combo-pop button:hover{background:rgba(233,180,76,0.15);}
-
-/* ---- view toggle / data row ---- */
-.pd-viewtoggle{display:flex; gap:0; margin-bottom:12px; border:1px solid var(--line); border-radius:8px; overflow:hidden; width:fit-content;}
-.pd-viewtoggle button{
-  background:none; border:none; color:var(--muted); cursor:pointer; padding:8px 14px;
-  font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.05em;
-}
-.pd-viewtoggle button.active{background:var(--raised); color:var(--accent);}
-.pd-datarow{display:flex; gap:14px; margin-bottom:14px;}
-.pd-data-btn{
-  background:none; border:none; color:var(--muted); cursor:pointer; padding:4px 0;
-  font-family:'IBM Plex Mono',monospace; font-size:11px; text-decoration:underline; text-underline-offset:2px;
-}
-.pd-data-btn:hover{color:var(--accent);}
-.pd-import-note{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); margin:-8px 0 14px;}
-.pd-import-note.err{color:var(--danger);}
-.pd-import-banner{background:var(--card); border:1px solid var(--accent); border-radius:12px; padding:12px; margin-bottom:14px;}
-.pd-import-banner p{font-size:13px; margin-bottom:10px; line-height:1.4;}
-
-/* ---- timeline ---- */
-.pd-tl{margin-top:4px;}
-.pd-tl-axis{
-  display:flex; justify-content:space-between; margin-left:118px; margin-bottom:6px;
-  font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted);
-}
-.pd-tl-row{display:flex; align-items:center; gap:8px; padding:10px 4px; cursor:pointer; border-radius:8px;}
-.pd-tl-row:hover, .pd-tl-row.selected{background:var(--raised);}
-.pd-tl-name{width:106px; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-shrink:0;}
-.pd-tl-track{position:relative; flex:1; height:20px;}
-.pd-tl-line{position:absolute; top:50%; left:0; right:0; height:1px; background:var(--line);}
-.pd-tl-bar{position:absolute; top:4px; height:12px; border-radius:6px;}
-.pd-tl-dot{
-  position:absolute; top:50%; width:9px; height:9px; border-radius:50%;
-  transform:translate(-50%,-50%); border:2px solid var(--bg);
-}
-.pd-tl-today{position:absolute; top:-2px; bottom:-2px; width:1px; background:var(--accent); opacity:.8;}
-.pd-tl-legend{
-  display:flex; gap:14px; margin-top:10px; font-family:'IBM Plex Mono',monospace;
-  font-size:10px; color:var(--muted); flex-wrap:wrap;
-}
-.pd-tl-legend span{display:flex; align-items:center; gap:5px;}
-.pd-tl-swatch{width:8px; height:8px; border-radius:50%; display:inline-block;}
-
-/* ---- misc ---- */
-.pd-empty{color:var(--muted); font-size:14px; margin-top:18px;}
-.pd-danger-btn{
-  background:none; border:1px solid var(--line); color:var(--muted); border-radius:8px;
-  padding:9px 12px; font-size:12px; cursor:pointer; font-family:'IBM Plex Mono',monospace;
-}
-.pd-danger-btn:hover{border-color:var(--danger); color:var(--danger);}
-.pd-saved{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); margin-top:6px; min-height:14px;}
-.pd-form{background:var(--card); border:1px solid var(--accent); border-radius:12px; padding:14px; margin-bottom:10px;}
-.pd-form input[type=text]{
-  width:100%; padding:10px 11px; font-size:14px; border:1px solid var(--line); border-radius:8px;
-  font-family:'Inter',sans-serif; margin-bottom:8px; background:var(--raised); color:var(--ink);
-}
-.pd-form input[type=text]:focus{outline:none; border-color:var(--accent);}
-.pd-form-row{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
-.pd-form-label{font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:4px;}
-.pd-btn{
-  border:none; background:var(--accent); color:var(--accent-ink); border-radius:8px; padding:10px 14px;
-  font-size:13px; font-weight:600; cursor:pointer; font-family:'Inter',sans-serif;
-}
-.pd-btn.ghost{background:transparent; color:var(--muted); border:1px solid var(--line);}
-
-/* ---- skeleton loading ---- */
-.pd-skel{padding:16px; max-width:420px;}
-.pd-skel-row{
-  height:78px; border-radius:12px; background:var(--raised); margin-bottom:10px;
-  animation:pd-pulse 1.2s ease-in-out infinite;
-}
-@keyframes pd-pulse{0%,100%{opacity:.5;} 50%{opacity:1;}}
-
-/* ---- toast (undo) ---- */
-.pd-toast{
-  position:fixed; left:50%; transform:translateX(-50%); z-index:300;
-  background:var(--raised); border:1px solid var(--line); border-radius:12px;
-  padding:12px 16px; display:flex; align-items:center; gap:16px;
-  box-shadow:0 12px 32px rgba(0,0,0,0.5); animation:pd-toast-in .2s ease;
-  font-size:13px; max-width:calc(100vw - 32px);
-}
-@keyframes pd-toast-in{from{opacity:0; transform:translate(-50%, 10px);} to{opacity:1; transform:translate(-50%, 0);}}
-.pd-toast button{
-  background:none; border:none; color:var(--accent); font-weight:600; cursor:pointer;
-  font-size:13px; font-family:'Inter',sans-serif; padding:6px 8px; margin:-6px -8px;
-}
-
-/* ---- FAB + composer ---- */
-.pd-inputrow{display:flex; gap:8px; align-items:center;}
-.pd-quickadd-row{margin-top:22px;}
-.pd-send{
-  display:none; width:44px; height:44px; border-radius:50%; border:none; flex-shrink:0;
-  background:var(--accent); color:var(--accent-ink); font-size:18px; font-weight:700; cursor:pointer;
-  align-items:center; justify-content:center;
-}
-.pd-send:active{transform:scale(.92);}
-.pd-send:disabled{opacity:.4;}
-
-/* ---- mobile ---- */
-@media (max-width: 860px){
-  .pd-body{display:block;}
-  .pd-left, .pd-right{
-    position:absolute; inset:0; width:100%; min-width:0; border-right:none;
-    transition:transform .28s cubic-bezier(.2,.8,.2,1);
-  }
-  .pd-left{transform:translateX(0); z-index:1;}
-  .pd-right{transform:translateX(100%); z-index:2;}
-  .pd-right.edge-dragging{transition:none !important;}
-  .pd-app.detail-open .pd-left{transform:translateX(-24%);}
-  .pd-app.detail-open .pd-right{transform:translateX(0);}
-  .pd-send{display:flex;}
-  .pd-back{display:inline-block;}
-  .pd-reorder{display:none;}
-  .pd-drag-handle, .pd-x{opacity:1;}
-  /* Task rows: tighter padding/gaps (Material list spec: 8dp row padding, 4dp tight gaps),
-     and due/date/delete pinned to their own line so wrap is predictable, not ragged. */
-  .pd-task{padding:9px 4px; gap:6px;}
-  .pd-task-title{padding:2px 0;}
-  .pd-task-meta{flex-basis:100%; justify-content:flex-end; margin-left:56px; gap:6px; margin-top:-2px;}
-  .pd-task-due{font-size:10.5px;}
-  .pd-dp-btn{padding:4px 8px; min-height:30px; font-size:11px;}
-  .pd-x{padding:6px 6px; margin:-4px -2px;}
-  .pd-drag-handle{padding:6px 2px; margin:-6px 0;}
-  .pd-quickadd-row{margin-top:16px;}
-  .pd-inputrow{margin-top:0;}
-  /* Zoom is disabled app-wide (see zoom-lock effect), so fields no longer need to
-     stay at 16px purely to dodge iOS auto-zoom — task titles get a touch smaller
-     for density; comfortable typing fields (name/notes/etc) stay at 16px. */
-  input[type=text], input[type=email], input[type=date], input[type=number],
-  textarea, select, [contenteditable]{font-size:16px !important;}
-  .pd-bubble-edit, .pd-panel-edit, .pd-proj-name{font-size:16px !important;}
-  .pd-task-title{font-size:15px !important;}
-  /* bottom sheet note editor */
-  .pd-overlay{align-items:flex-end; padding:0;}
-  .pd-panel{width:100%; max-width:100%; border-radius:16px 16px 0 0; border-left:none; border-right:none; border-bottom:none; animation:pd-sheet-in .22s cubic-bezier(.2,.8,.2,1);}
-  .pd-panel.fullscreen{width:100%; height:96dvh !important;}
-  .pd-resize-handle{order:-1; border-top:none; border-bottom:1px solid var(--line); height:22px;}
-  .pd-panel-header{order:0;}
-  .pd-panel-body{order:1; padding-bottom:max(16px, env(safe-area-inset-bottom));}
-}
-@keyframes pd-sheet-in{from{transform:translateY(30%); opacity:.6;} to{transform:none; opacity:1;}}
-@media (prefers-reduced-motion: reduce){
-  *{transition:none !important; animation:none !important;}
-}
-`;
-
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                            */
-/* ------------------------------------------------------------------ */
-const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-const pad = (n) => String(n).padStart(2, "0");
-const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
-const colorOf = (p) => PALETTE[(p.colorIdx ?? 0) % PALETTE.length];
-
-function progressOf(p) {
-  if (!p.tasks.length) return null;
-  return Math.round((p.tasks.filter((t) => t.done).length / p.tasks.length) * 100);
-}
-function daysLeft(dateStr) {
-  if (!dateStr) return null;
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const d = new Date(dateStr + "T00:00:00");
-  return Math.round((d - today) / 86400000);
-}
-function dueLabel(dateStr) {
-  const dl = daysLeft(dateStr);
-  if (dl === null) return null;
-  if (dl < 0) return { text: `${Math.abs(dl)}d over`, overdue: true };
-  if (dl === 0) return { text: "today", overdue: true };
-  return { text: `${dl}d left`, overdue: false };
-}
-function fmtDate(iso) {
-  if (!iso) return null;
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
-}
-function nextDue(p) {
-  const dates = p.tasks.filter((t) => !t.done && t.deadline).map((t) => t.deadline);
-  if (!dates.length) return null;
-  return dates.sort()[0];
-}
-function startedLabel(startDate) {
-  const dl = daysLeft(startDate);
-  if (dl === null) return null;
-  if (dl > 0) return `starts in ${dl}d`;
-  if (dl === 0) return "started today";
-  return `day ${Math.abs(dl) + 1}`;
-}
-function attentionSort(a, b) {
-  const doneA = progressOf(a) === 100, doneB = progressOf(b) === 100;
-  if (doneA !== doneB) return doneA ? 1 : -1;
-  const da = daysLeft(nextDue(a)), db = daysLeft(nextDue(b));
-  if (da === null && db === null) return a.createdAt - b.createdAt;
-  if (da === null) return 1;
-  if (db === null) return -1;
-  return da - db;
-}
-function moveItem(list, fromId, toId) {
-  const items = [...list];
-  const fromIdx = items.findIndex((i) => i.id === fromId);
-  const toIdx = items.findIndex((i) => i.id === toId);
-  if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return list;
-  const [moved] = items.splice(fromIdx, 1);
-  items.splice(toIdx, 0, moved);
-  return items;
-}
-function moveBy(list, id, dir) {
-  const items = [...list];
-  const idx = items.findIndex((i) => i.id === id);
-  const swapIdx = idx + dir;
-  if (idx === -1 || swapIdx < 0 || swapIdx >= items.length) return list;
-  [items[idx], items[swapIdx]] = [items[swapIdx], items[idx]];
-  return items;
-}
-function escapeHtml(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-function textToHtml(text) {
-  return escapeHtml(text).replace(/\n/g, "<br>");
-}
-function sanitizeHtml(html) {
-  const allowed = /^(B|STRONG|I|EM|U|S|STRIKE|BR|DIV|SPAN|H2|H3|H4|PRE|UL|LI|OL|IMG|P)$/;
-  const tmp = document.createElement("div");
-  tmp.innerHTML = html;
-  const walk = (node) => {
-    [...node.childNodes].forEach((child) => {
-      if (child.nodeType === 1) {
-        if (!allowed.test(child.tagName)) {
-          const text = document.createTextNode(child.textContent);
-          node.replaceChild(text, child);
-          return;
-        }
-        if (child.tagName === "IMG") {
-          const src = child.getAttribute("src") || "";
-          if (!src.startsWith("data:image/")) { child.remove(); return; }
-          [...child.attributes].forEach((a) => { if (a.name !== "src") child.removeAttribute(a.name); });
-          return;
-        }
-        [...child.attributes].forEach((attr) => child.removeAttribute(attr.name));
-        walk(child);
-      }
-    });
+const SCREEN_TITLES = { today: "Today", brain: "Brain", projects: "Projects", calendar: "Calendar", stats: "Insights" };
+// Shared defaults for both project.tasks[] and the project-less inbox[] — additive only,
+// never fabricates completedAt/history for tasks that were already done pre-redesign.
+function migrateTask(t) {
+  return {
+    deadline: null,
+    priority: "med",
+    recurring: false,
+    trackedSeconds: 0,
+    completedAt: null,
+    timeLabel: null,
+    subtasks: [],
+    ...t,
   };
-  walk(tmp);
-  return tmp.innerHTML;
 }
-function htmlToPlain(html) {
-  const tmp = document.createElement("div");
-  tmp.innerHTML = html;
-  return tmp.textContent || "";
-}
-function imageFileToDataURL(file, maxDim = 900, quality = 0.8) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const render = (dim, q) => {
-        const scale = Math.min(1, dim / Math.max(img.width, img.height));
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-        const cv = document.createElement("canvas");
-        cv.width = w; cv.height = h;
-        cv.getContext("2d").drawImage(img, 0, 0, w, h);
-        return cv.toDataURL("image/jpeg", q);
-      };
-      let out = render(maxDim, quality);
-      if (out.length > 1_800_000) out = render(600, 0.68);
-      URL.revokeObjectURL(url);
-      resolve(out);
-    };
-    img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
-    img.src = url;
-  });
-}
+
 function migrate(p, i) {
   const out = { ...p };
   if (typeof out.notes === "string") out.notes = out.notes.trim() ? [{ id: uid(), text: out.notes.trim() }] : [];
@@ -624,40 +60,24 @@ function migrate(p, i) {
     out.colorIdx = oldIdx >= 0 ? oldIdx : i % PALETTE.length;
   }
   delete out.deadline; delete out.color;
-  out.tasks = (out.tasks || []).map((t) => ({ deadline: null, ...t }));
+  out.tasks = (out.tasks || []).map(migrateTask);
   return out;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Hooks: mobile detection + on-screen keyboard inset                 */
-/* ------------------------------------------------------------------ */
-function useIsMobile() {
-  const [mobile, setMobile] = useState(() => window.matchMedia("(max-width: 860px)").matches);
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 860px)");
-    const onChange = () => setMobile(mq.matches);
-    mq.addEventListener ? mq.addEventListener("change", onChange) : mq.addListener(onChange);
-    return () => { mq.removeEventListener ? mq.removeEventListener("change", onChange) : mq.removeListener(onChange); };
-  }, []);
-  return mobile;
+// Defaults for the new root-level fields (inbox, logs, timer, reset date) — called once
+// alongside migrate() when loading. Never fabricates history: logs start empty.
+function migrateRoot(data) {
+  return {
+    inbox: (data.inbox || []).map(migrateTask),
+    notes: data.notes || [], // standalone notes, not tied to any project — same {id, text} shape as project.notes
+    completionLog: data.completionLog || {},
+    focusLog: data.focusLog || {},
+    lastResetDate: data.lastResetDate || todayISO(),
+    runningTaskId: data.runningTaskId || null,
+    runStart: data.runStart || null,
+  };
 }
 
-// Distance the on-screen keyboard covers, so composers/toasts sit above it
-function useKeyboardInset() {
-  const [inset, setInset] = useState(0);
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const onResize = () => {
-      const covered = window.innerHeight - vv.height - vv.offsetTop;
-      setInset(Math.max(0, Math.round(covered)));
-    };
-    vv.addEventListener("resize", onResize);
-    vv.addEventListener("scroll", onResize);
-    return () => { vv.removeEventListener("resize", onResize); vv.removeEventListener("scroll", onResize); };
-  }, []);
-  return inset;
-}
 
 /* ------------------------------------------------------------------ */
 /*  Custom themed date picker (viewport-clamped)                       */
@@ -866,238 +286,12 @@ function Timeline({ projects, selectedId, onSelect }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Progress ring                                                      */
-/* ------------------------------------------------------------------ */
-function Ring({ pct, color, size = 52 }) {
-  const r = (size - 8) / 2, c = 2 * Math.PI * r;
-  const off = pct === null ? c : c - (pct / 100) * c;
-  return (
-    <svg width={size} height={size} style={{ flexShrink: 0 }} role="img"
-      aria-label={pct === null ? "Not started" : `${pct} percent complete`}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="4"
-        strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off}
-        transform={`rotate(-90 ${size / 2} ${size / 2})`} style={{ transition: "stroke-dashoffset .6s ease" }} />
-      <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle"
-        fill={pct === null ? "var(--muted)" : "var(--ink)"}
-        style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 11, fontWeight: 600 }}>
-        {pct === null ? "—" : `${pct}%`}
-      </text>
-    </svg>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Rich-text toolbar with Aa style menu                               */
-/* ------------------------------------------------------------------ */
-function ToolbarButtons({ cmd }) {
-  const [aaOpen, setAaOpen] = useState(false);
-  const wrapRef = useRef(null);
-
-  useEffect(() => {
-    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setAaOpen(false); };
-    if (aaOpen) document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [aaOpen]);
-
-  const setBlock = (tag) => { cmd("formatBlock", tag); setAaOpen(false); };
-
-  return (
-    <>
-      <button type="button" className="b" onClick={() => cmd("bold")} title="Bold (⌘B)">B</button>
-      <button type="button" className="i" onClick={() => cmd("italic")} title="Italic (⌘I)">I</button>
-      <button type="button" className="u" onClick={() => cmd("underline")} title="Underline (⌘U)">U</button>
-      <button type="button" className="s" onClick={() => cmd("strikeThrough")} title="Strikethrough">S</button>
-      <div className="pd-aa-wrap" ref={wrapRef}>
-        <button type="button" onClick={() => setAaOpen((o) => !o)} title="Text style" style={{ width: "auto", padding: "0 8px" }}>Aa</button>
-        {aaOpen && (
-          <div className="pd-aa-menu">
-            <button type="button" className="pd-aa-title" onClick={() => setBlock("H2")}>Title</button>
-            <button type="button" className="pd-aa-heading" onClick={() => setBlock("H3")}>Heading</button>
-            <button type="button" className="pd-aa-sub" onClick={() => setBlock("H4")}>Subheading</button>
-            <button type="button" className="pd-aa-body" onClick={() => setBlock("P")}>Body</button>
-            <button type="button" className="pd-aa-mono" onClick={() => setBlock("PRE")}>Monostyled</button>
-          </div>
-        )}
-      </div>
-      <button type="button" onClick={() => cmd("insertUnorderedList")} title="Bulleted list">•—</button>
-    </>
-  );
-}
-
-// Paste as plain text but keep line breaks — never inherit source formatting
-function handlePlainPaste(e) {
-  e.preventDefault();
-  const text = (e.clipboardData || window.clipboardData).getData("text/plain");
-  document.execCommand("insertHTML", false, escapeHtml(text).replace(/\n/g, "<br>"));
-}
-
-/* ------------------------------------------------------------------ */
-/*  Note bubble + focus editor (modal desktop / bottom sheet mobile)   */
-/* ------------------------------------------------------------------ */
-const PANEL_MIN_H = 240;
-const DEFAULT_PANEL_H = 380;
-
-function Bubble({ note, color, isMobile, onSave, onDelete, dragProps, touchReorderStart }) {
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
-  const [panelHeight, setPanelHeight] = useState(DEFAULT_PANEL_H);
-  const panelRef = useRef(null);
-  const dragState = useRef(null);
-  const prevFocus = useRef(null);
-  const kb = useKeyboardInset();
-  const isLong = htmlToPlain(note.text).length > 160 || /<img/i.test(note.text);
-
-  useEffect(() => {
-    if (panelOpen && panelRef.current) {
-      prevFocus.current = document.activeElement;
-      panelRef.current.innerHTML = note.text;
-      // Desktop: jump straight into editing. Mobile: open the sheet calmly first —
-      // autofocus would summon the keyboard mid-animation and shove the sheet off-screen.
-      if (!isMobile) {
-        panelRef.current.focus();
-        const range = document.createRange();
-        range.selectNodeContents(panelRef.current); range.collapse(false);
-        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panelOpen]);
-
-  const close = () => {
-    setPanelOpen(false); setFullscreen(false);
-    if (prevFocus.current && prevFocus.current.focus) prevFocus.current.focus();
-  };
-  const commitPanel = () => {
-    const raw = panelRef.current ? panelRef.current.innerHTML : note.text;
-    const clean = sanitizeHtml(raw);
-    if (htmlToPlain(clean).trim().length === 0 && !/<img/i.test(clean)) onDelete(); else onSave(clean);
-    close();
-  };
-  const cancelPanel = () => close(); // Esc = discard changes
-
-  const panelCmd = (name, val = null) => { document.execCommand(name, false, val); panelRef.current && panelRef.current.focus(); };
-
-  const insertImagesIntoPanel = async (files) => {
-    for (const f of files) {
-      if (!f.type.startsWith("image/")) continue;
-      try {
-        const dataUrl = await imageFileToDataURL(f);
-        panelRef.current && panelRef.current.focus();
-        document.execCommand("insertHTML", false, `<img src="${dataUrl}"><br>`);
-      } catch (e) { /* unreadable image — skip */ }
-    }
-  };
-
-  const handleBubbleDrop = async (e) => {
-    const files = [...(e.dataTransfer?.files || [])].filter((f) => f.type.startsWith("image/"));
-    if (files.length) {
-      e.preventDefault(); e.stopPropagation();
-      let html = note.text;
-      for (const f of files) {
-        try { html += `<br><img src="${await imageFileToDataURL(f)}">`; } catch (err) { /* skip */ }
-      }
-      onSave(sanitizeHtml(html));
-      dragProps?.onDragEnd?.();
-      return;
-    }
-    dragProps?.onDrop?.(e);
-  };
-
-  // Resize: desktop drags down to grow; mobile sheet drags up to grow, swipe far down = save & close
-  const onResizeStart = (e) => {
-    e.preventDefault();
-    const y = e.touches ? e.touches[0].clientY : e.clientY;
-    dragState.current = { startY: y, startHeight: panelHeight };
-    const move = (ev) => {
-      if (!dragState.current) return;
-      const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
-      const delta = (cy - dragState.current.startY) * (isMobile ? -1 : 1);
-      const max = Math.round(window.innerHeight * 0.9);
-      const next = dragState.current.startHeight + delta;
-      if (isMobile && next < 170) { dragState.current = null; cleanup(); commitPanel(); return; }
-      setPanelHeight(Math.min(Math.max(next, isMobile ? 200 : PANEL_MIN_H), max));
-      if (ev.cancelable) ev.preventDefault();
-    };
-    const cleanup = () => {
-      window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up);
-      window.removeEventListener("touchmove", move); window.removeEventListener("touchend", up);
-    };
-    const up = () => { dragState.current = null; cleanup(); };
-    window.addEventListener("mousemove", move); window.addEventListener("mouseup", up);
-    window.addEventListener("touchmove", move, { passive: false }); window.addEventListener("touchend", up);
-  };
-
-  const panelKeyDown = (e) => {
-    if (e.key === "Escape") { e.preventDefault(); cancelPanel(); return; }
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") { e.preventDefault(); panelCmd("bold"); }
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "i") { e.preventDefault(); panelCmd("italic"); }
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "u") { e.preventDefault(); panelCmd("underline"); }
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); commitPanel(); }
-    if (e.key === "Tab") { e.preventDefault(); document.execCommand("insertHTML", false, "&nbsp;&nbsp;"); } // keep focus trapped
-  };
-
-  return (
-    <>
-      <div className={`pd-bubble ${dragProps?.className || ""}`}
-        data-rid={note.id} data-rkind="note"
-        style={{ background: color.bg, borderLeft: `3px solid ${color.fg}`, "--pfg": color.fg }}
-        draggable={!isMobile} onDragStart={dragProps?.onDragStart} onDragOver={dragProps?.onDragOver}
-        onDrop={handleBubbleDrop} onDragEnd={dragProps?.onDragEnd}
-        onClick={() => setPanelOpen(true)}>
-        <span className="pd-drag-handle"
-          onMouseDown={(e) => e.stopPropagation()}
-          onTouchStart={(e) => { e.stopPropagation(); touchReorderStart?.(e, note.id, "note"); }}>⠿</span>
-        <div className={`pd-bubble-content ${isLong ? "clamped" : ""}`} dangerouslySetInnerHTML={{ __html: note.text }} />
-        <button className="pd-x" aria-label="Delete note" onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}>×</button>
-      </div>
-
-      {panelOpen && (
-        <div className="pd-overlay" style={isMobile ? { paddingBottom: kb } : undefined}
-          onMouseDown={(e) => { if (e.target === e.currentTarget) commitPanel(); }}>
-          <div className={`pd-panel ${fullscreen ? "fullscreen" : ""}`} role="dialog" aria-modal="true" aria-label="Edit note"
-            style={{
-              ...(!fullscreen ? { height: panelHeight } : {}),
-              ...(isMobile ? { maxHeight: `calc(100dvh - ${kb + 8}px)` } : {}),
-            }}>
-            <div className="pd-panel-header">
-              <div className="pd-toolbar" onMouseDown={(e) => e.preventDefault()}>
-                <ToolbarButtons cmd={panelCmd} />
-              </div>
-              <div className="pd-panel-actions">
-                <button type="button" onClick={() => setFullscreen((f) => !f)}
-                  title={fullscreen ? "Exit full screen" : "Full screen"}>{fullscreen ? "⤡" : "⤢"}</button>
-                <button type="button" onClick={commitPanel} title="Save & close">✕</button>
-              </div>
-            </div>
-            <div className="pd-panel-body"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                const files = [...(e.dataTransfer?.files || [])];
-                if (files.some((f) => f.type.startsWith("image/"))) { e.preventDefault(); insertImagesIntoPanel(files); }
-              }}>
-              <div ref={panelRef} className="pd-panel-edit" contentEditable suppressContentEditableWarning
-                onPaste={handlePlainPaste} onKeyDown={panelKeyDown} />
-            </div>
-            {!fullscreen && (
-              <div className="pd-resize-handle" onMouseDown={onResizeStart} onTouchStart={onResizeStart}>
-                <span />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /*  Task row with swipe gestures (mobile) + HTML5 drag (desktop)       */
 /* ------------------------------------------------------------------ */
 function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle, onDeadline,
-  dragHandlers, reorderUp, reorderDown, canUp, canDown, touchReorderStart, dragClass }) {
+  onCyclePriority, onToggleRecurring, dragHandlers, reorderUp, reorderDown, canUp, canDown, touchReorderStart, dragClass }) {
   const [dx, setDx] = useState(0);
   const [snap, setSnap] = useState(false);
   const start = useRef(null);
@@ -1160,14 +354,23 @@ function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle
         <button className={`pd-check pd-press ${task.done ? "done" : ""}`}
           style={task.done ? { background: color.fg, borderColor: color.fg } : {}}
           onClick={onToggle} aria-label={task.done ? "Mark as not done" : "Mark as done"}>
-          <svg width="13" height="13" viewBox="0 0 12 12"><path d="M2 6.5L4.8 9L10 3.5" fill="none" stroke="#14181E" strokeWidth="2" strokeLinecap="round" /></svg>
+          <svg width="13" height="13" viewBox="0 0 12 12"><path d="M2 6.5L4.8 9L10 3.5" fill="none" stroke="#0A0A0A" strokeWidth="2" strokeLinecap="round" /></svg>
         </button>
+        {!completed && onCyclePriority && (
+          <button type="button" className="pd-priority-dot" title={`Priority: ${task.priority || "med"} (click to change)`}
+            style={{ background: PRIORITY_COLOR[task.priority || "med"] }}
+            onClick={onCyclePriority} aria-label="Cycle task priority" />
+        )}
         <input className={`pd-task-title ${task.done ? "done" : ""}`} value={task.title}
           onChange={(e) => onTitle(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.target.blur(); }} aria-label="Task title" />
         <div className="pd-task-meta">
           {due && <span className={`pd-task-due ${due.overdue ? "overdue" : ""}`}>{due.text}</span>}
           {!completed && <DatePicker value={task.deadline} onChange={onDeadline} />}
+          {!completed && onToggleRecurring && (
+            <button type="button" className={`pd-recur-toggle ${task.recurring ? "on" : ""}`} title="Repeats daily"
+              onClick={onToggleRecurring} aria-label={task.recurring ? "Stop repeating daily" : "Repeat daily"}>↻</button>
+          )}
           <button className="pd-x" aria-label="Delete task" onClick={onDelete}>×</button>
         </div>
       </div>
@@ -1176,9 +379,49 @@ function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle
 }
 
 /* ------------------------------------------------------------------ */
+/*  Single-task editor — for inbox tasks reached from the Calendar,     */
+/*  which have no project page of their own to land on.                 */
+/* ------------------------------------------------------------------ */
+function TaskEditModal({ task, onClose, onTitle, onDeadline, onCyclePriority, onToggleRecurring, onToggleDone, onDelete }) {
+  return (
+    <div className="pd-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="pd-panel" role="dialog" aria-modal="true" aria-label="Task details" style={{ height: "auto" }}>
+        <div className="pd-panel-header">
+          <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 15 }}>Task</div>
+          <div className="pd-panel-actions">
+            <button type="button" onClick={onClose} title="Close">✕</button>
+          </div>
+        </div>
+        <div className="pd-panel-body pd-task-edit-body">
+          <div className="pd-task-edit-row">
+            <button className={`pd-check pd-press ${task.done ? "done" : ""}`}
+              style={task.done ? { background: "var(--accent)", borderColor: "var(--accent)" } : {}}
+              onClick={onToggleDone} aria-label={task.done ? "Mark as not done" : "Mark as done"}>
+              <svg width="13" height="13" viewBox="0 0 12 12"><path d="M2 6.5L4.8 9L10 3.5" fill="none" stroke="#0A0A0A" strokeWidth="2" strokeLinecap="round" /></svg>
+            </button>
+            <button type="button" className="pd-priority-dot" title={`Priority: ${task.priority || "med"} (click to change)`}
+              style={{ background: PRIORITY_COLOR[task.priority || "med"] }} onClick={onCyclePriority} aria-label="Cycle task priority" />
+            <input className="pd-proj-name" style={{ fontSize: 18 }} value={task.title}
+              onChange={(e) => onTitle(e.target.value)} aria-label="Task title" />
+          </div>
+          <div className="pd-form-row">
+            <DatePicker value={task.deadline} onChange={onDeadline} />
+            <button type="button" className={`pd-recur-toggle ${task.recurring ? "on" : ""}`} style={{ opacity: 1 }}
+              onClick={onToggleRecurring} title="Repeats daily">
+              ↻ {task.recurring ? "Repeats daily" : "One-time"}
+            </button>
+          </div>
+          <button type="button" className="pd-danger-btn pd-press" style={{ alignSelf: "flex-start" }} onClick={onDelete}>delete task</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main app                                                           */
 /* ------------------------------------------------------------------ */
-function ProjectDashboard() {
+function AppShell() {
   const [projects, setProjects] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -1198,7 +441,32 @@ function ProjectDashboard() {
   const [dragOverNoteId, setDragOverNoteId] = useState(null);
   const [touchDragId, setTouchDragId] = useState(null);
 
+  // ---- redesign: project-less inbox, completion/focus history, recurring reset, time tracking ----
+  const [inbox, setInbox] = useState([]);
+  const [notes, setNotes] = useState([]); // standalone notes (Brain screen), parallel to inbox
+  const [completionLog, setCompletionLog] = useState({});
+  const [focusLog, setFocusLog] = useState({});
+  const [lastResetDate, setLastResetDate] = useState(null);
+  const [runningTaskId, setRunningTaskId] = useState(null);
+  const [runStart, setRunStart] = useState(null);
+  const [tick, setTick] = useState(0); // forces re-render for live elapsed-time display only
+  const [screen, setScreen] = useState("today"); // "today" | "projects" | "calendar" | "stats" — never persisted
+  const [inboxInput, setInboxInput] = useState(""); // top-bar quick-add text
+  const [brainInput, setBrainInput] = useState(""); // top-bar note capture (Brain screen)
+  const [editingTaskId, setEditingTaskId] = useState(null); // inbox task open in the single-task editor
+  const [paletteOpen, setPaletteOpen] = useState(false); // command palette (Cmd/Ctrl+K)
+  // Sidebar collapse is a device-local UI preference, not app data — localStorage, not the Supabase blob.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("pd-sidebar-collapsed") === "1");
+  const toggleSidebarCollapsed = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem("pd-sidebar-collapsed", next ? "1" : "0");
+      return next;
+    });
+  }, []);
+
   const isMobile = useIsMobile();
+  const greeting = useGreeting(); // Timezone-aware dynamic greeting for Today screen
 
   // Lock zoom for a native-app feel. Note for accessibility: this removes the
   // user's ability to pinch-zoom text, which WCAG normally recommends against —
@@ -1220,7 +488,19 @@ function ProjectDashboard() {
   const quickAddRef = useRef(null);
   const selectedIdRef = useRef(null);
   const touchDrag = useRef(null);
+  const tickTimer = useRef(null);
   selectedIdRef.current = selectedId;
+
+  // Mirror the redesign's root-level state into refs so the debounced persist() below
+  // can always read the latest values, no matter which piece of state triggered the save.
+  const projectsRef = useRef(projects); projectsRef.current = projects;
+  const inboxRef = useRef(inbox); inboxRef.current = inbox;
+  const notesRef = useRef(notes); notesRef.current = notes;
+  const completionLogRef = useRef(completionLog); completionLogRef.current = completionLog;
+  const focusLogRef = useRef(focusLog); focusLogRef.current = focusLog;
+  const lastResetDateRef = useRef(lastResetDate); lastResetDateRef.current = lastResetDate;
+  const runningTaskIdRef = useRef(runningTaskId); runningTaskIdRef.current = runningTaskId;
+  const runStartRef = useRef(runStart); runStartRef.current = runStart;
 
   /* ---- load ---- */
   useEffect(() => {
@@ -1230,32 +510,225 @@ function ProjectDashboard() {
         if (res && res.value) {
           const data = JSON.parse(res.value);
           const projs = (data.projects || []).map(migrate);
-          setProjects(projs);
+          setProjects(projs); projectsRef.current = projs;
           if (data.lastSelectedId && projs.some((p) => p.id === data.lastSelectedId) && !window.matchMedia("(max-width: 860px)").matches) {
             setSelectedId(data.lastSelectedId);
           }
+          const root = migrateRoot(data);
+          setInbox(root.inbox); inboxRef.current = root.inbox;
+          setNotes(root.notes); notesRef.current = root.notes;
+          setCompletionLog(root.completionLog); completionLogRef.current = root.completionLog;
+          setFocusLog(root.focusLog); focusLogRef.current = root.focusLog;
+          setLastResetDate(root.lastResetDate); lastResetDateRef.current = root.lastResetDate;
+          if (root.runningTaskId && root.runStart) {
+            setRunningTaskId(root.runningTaskId); runningTaskIdRef.current = root.runningTaskId;
+            setRunStart(root.runStart); runStartRef.current = root.runStart;
+            clearInterval(tickTimer.current);
+            tickTimer.current = setInterval(() => setTick((t) => t + 1), 1000);
+          }
+        } else {
+          const today = todayISO();
+          setLastResetDate(today); lastResetDateRef.current = today;
         }
       } catch (e) { /* first run */ }
       setLoaded(true);
     })();
+    return () => clearInterval(tickTimer.current);
   }, []);
 
-  /* ---- debounced save (projects + last selected) ---- */
-  const persist = useCallback((next) => {
+  /* ---- debounced save (whole root blob: projects, inbox, logs, timer, last selected) ---- */
+  const persist = useCallback(() => {
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       try {
-        await storage.set(STORAGE_KEY, JSON.stringify({ projects: next, lastSelectedId: selectedIdRef.current }));
-        setSavedFlash("saved");
+        const blob = JSON.stringify({
+          projects: projectsRef.current,
+          inbox: inboxRef.current,
+          notes: notesRef.current,
+          completionLog: completionLogRef.current,
+          focusLog: focusLogRef.current,
+          lastResetDate: lastResetDateRef.current,
+          runningTaskId: runningTaskIdRef.current,
+          runStart: runStartRef.current,
+          lastSelectedId: selectedIdRef.current,
+        });
+        await storage.set(STORAGE_KEY, blob);
         clearTimeout(flashTimer.current);
-        flashTimer.current = setTimeout(() => setSavedFlash(""), 1200);
+        if (blob.length > 2_500_000) {
+          // Inline images are the usual culprit — surface it before saves get sluggish.
+          setSavedFlash("saved — data is getting large; consider removing old brain entries");
+          flashTimer.current = setTimeout(() => setSavedFlash(""), 5000);
+        } else {
+          setSavedFlash("saved");
+          flashTimer.current = setTimeout(() => setSavedFlash(""), 1200);
+        }
       } catch (e) { setSavedFlash("save failed — will retry on next change"); }
     }, 500);
   }, []);
 
   const update = useCallback((fn) => {
-    setProjects((prev) => { const next = fn(prev); persist(next); return next; });
+    setProjects((prev) => { const next = fn(prev); projectsRef.current = next; persist(); return next; });
   }, [persist]);
+
+  const updateInbox = useCallback((fn) => {
+    setInbox((prev) => { const next = fn(prev); inboxRef.current = next; persist(); return next; });
+  }, [persist]);
+
+  const updateNotes = useCallback((fn) => {
+    setNotes((prev) => { const next = fn(prev); notesRef.current = next; persist(); return next; });
+  }, [persist]);
+
+  // ---- generalized note lookup: a note can be standalone or live in any project ----
+  const locateAndPatchNote = useCallback((noteId, fn) => {
+    if (notesRef.current.some((n) => n.id === noteId)) {
+      updateNotes((ns) => ns.map((n) => (n.id === noteId ? fn(n) : n)));
+      return;
+    }
+    update((prev) => prev.map((p) => (
+      p.notes.some((n) => n.id === noteId)
+        ? { ...p, notes: p.notes.map((n) => (n.id === noteId ? fn(n) : n)) }
+        : p
+    )));
+  }, [update, updateNotes]);
+
+  // Durable per-day counters — survive task deletion, the only source of truth for streak/heatmap/week-bar.
+  const bumpCompletionLog = useCallback((date, delta) => {
+    setCompletionLog((prev) => {
+      const next = { ...prev, [date]: Math.max(0, (prev[date] || 0) + delta) };
+      completionLogRef.current = next;
+      persist();
+      return next;
+    });
+  }, [persist]);
+  const bumpFocusLog = useCallback((date, seconds) => {
+    setFocusLog((prev) => {
+      const next = { ...prev, [date]: (prev[date] || 0) + seconds };
+      focusLogRef.current = next;
+      persist();
+      return next;
+    });
+  }, [persist]);
+
+  // ---- generalized task lookup: a task can live in the inbox or in any project ----
+  const locateAndPatchTask = useCallback((taskId, fn) => {
+    if (inboxRef.current.some((t) => t.id === taskId)) {
+      updateInbox((ts) => ts.map((t) => (t.id === taskId ? fn(t) : t)));
+      return;
+    }
+    update((prev) => prev.map((p) => (
+      p.tasks.some((t) => t.id === taskId)
+        ? { ...p, tasks: p.tasks.map((t) => (t.id === taskId ? fn(t) : t)) }
+        : p
+    )));
+  }, [update, updateInbox]);
+
+  const toggleTaskDone = useCallback((taskId) => {
+    // Compute the log delta outside the state-updater callback — React (StrictMode in
+    // particular) may invoke that callback more than once per call, and bumpCompletionLog
+    // is a side effect that must only run once per real toggle.
+    const today = todayISO();
+    let logDelta = null;
+    locateAndPatchTask(taskId, (t) => {
+      if (!t.done) {
+        logDelta = { day: today, delta: 1 };
+        return { ...t, done: true, completedAt: Date.now() };
+      }
+      logDelta = { day: t.completedAt ? localDateISO(t.completedAt) : today, delta: -1 };
+      return { ...t, done: false, completedAt: null };
+    });
+    if (logDelta) bumpCompletionLog(logDelta.day, logDelta.delta);
+  }, [locateAndPatchTask, bumpCompletionLog]);
+
+  const cycleTaskPriority = useCallback((taskId) => {
+    locateAndPatchTask(taskId, (t) => ({ ...t, priority: PRIORITY_CYCLE[t.priority] || "med" }));
+  }, [locateAndPatchTask]);
+
+  const toggleTaskRecurring = useCallback((taskId) => {
+    locateAndPatchTask(taskId, (t) => ({ ...t, recurring: !t.recurring }));
+  }, [locateAndPatchTask]);
+
+  // ---- time tracking: one global runner; starting a new task flushes the previous one ----
+  const flushRunning = useCallback(() => {
+    const id = runningTaskIdRef.current;
+    const start = runStartRef.current;
+    if (!id || !start) return;
+    const elapsed = (Date.now() - start) / 1000;
+    locateAndPatchTask(id, (t) => ({ ...t, trackedSeconds: t.trackedSeconds + elapsed }));
+    bumpFocusLog(todayISO(), elapsed);
+  }, [locateAndPatchTask, bumpFocusLog]);
+
+  const toggleTrack = useCallback((taskId) => {
+    const stopping = runningTaskIdRef.current === taskId;
+    flushRunning();
+    clearInterval(tickTimer.current);
+    if (stopping) {
+      setRunningTaskId(null); runningTaskIdRef.current = null;
+      setRunStart(null); runStartRef.current = null;
+      persist();
+      return;
+    }
+    const start = Date.now();
+    setRunningTaskId(taskId); runningTaskIdRef.current = taskId;
+    setRunStart(start); runStartRef.current = start;
+    persist();
+    tickTimer.current = setInterval(() => setTick((t) => t + 1), 1000);
+  }, [flushRunning, persist]);
+
+  // Top-bar quick-add target: a project-less task, visible in Today/Calendar but not the Projects grid.
+  const addInboxTask = useCallback((raw) => {
+    const { title, timeLabel } = parseQuickAdd(raw);
+    if (!title) return false;
+    updateInbox((ts) => [...ts, migrateTask({ id: uid(), title, done: false, deadline: todayISO(), createdAt: Date.now(), timeLabel })]);
+    return true;
+  }, [updateInbox]);
+
+  // Jump to a project's detail view — shared by Today/Calendar's inline links and the command palette.
+  const openProject = useCallback((id) => { setScreen("projects"); setSelectedId(id); }, []);
+  // Command palette "New project" quick action: prefill the Projects screen's creation form and open it.
+  const startNewProject = useCallback((name) => {
+    setScreen("projects"); setSelectedId(null);
+    setNewProj({ name, client: "", location: "", startDate: todayISO() });
+    setAdding(true);
+  }, []);
+
+  // Single-task editor (Calendar chip click on a project-less task — it has no project
+  // page to land on, so it gets a small standalone editor instead).
+  const editingTask = inbox.find((t) => t.id === editingTaskId) || null;
+  const editTaskTitle = useCallback((title) => {
+    updateInbox((ts) => ts.map((t) => (t.id === editingTaskId ? { ...t, title } : t)));
+  }, [updateInbox, editingTaskId]);
+  const editTaskDeadline = useCallback((iso) => {
+    updateInbox((ts) => ts.map((t) => (t.id === editingTaskId ? { ...t, deadline: iso } : t)));
+  }, [updateInbox, editingTaskId]);
+  const deleteEditingTask = useCallback(() => {
+    updateInbox((ts) => ts.filter((t) => t.id !== editingTaskId));
+    setEditingTaskId(null);
+  }, [updateInbox, editingTaskId]);
+
+  // Daily reset for recurring tasks — flips done back to false so they reappear tomorrow.
+  // Never touches completionLog: that day's completion was already recorded when it happened.
+  const runRecurringReset = useCallback(() => {
+    const today = todayISO();
+    if (lastResetDateRef.current === today) return;
+    const resetTask = (t) => {
+      if (!t.recurring || !t.done) return t;
+      const completedDay = t.completedAt ? localDateISO(t.completedAt) : null;
+      if (completedDay === today) return t; // already completed today — leave it
+      return { ...t, done: false, completedAt: null };
+    };
+    updateInbox((ts) => ts.map(resetTask));
+    update((prev) => prev.map((p) => ({ ...p, tasks: p.tasks.map(resetTask) })));
+    setLastResetDate(today); lastResetDateRef.current = today;
+    persist();
+  }, [updateInbox, update, persist]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    runRecurringReset();
+    const onVisible = () => { if (document.visibilityState === "visible") runRecurringReset(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [loaded, runRecurringReset]);
 
   // Persist selection changes too (so reload restores your place)
   useEffect(() => {
@@ -1307,10 +780,10 @@ function ProjectDashboard() {
   const patchProject = (patch) => update((prev) => prev.map((p) => (p.id === selected.id ? { ...p, ...patch } : p)));
   const patchTasks = (fn) => update((prev) => prev.map((p) => (p.id === selected.id ? { ...p, tasks: fn(p.tasks) } : p)));
 
-  const addTaskTitled = (title) => {
-    const clean = title.trim();
-    if (!clean || !selected) return false;
-    patchTasks((ts) => [...ts, { id: uid(), title: clean, done: false, deadline: todayISO(), createdAt: Date.now() }]);
+  const addTaskTitled = (raw) => {
+    const { title, timeLabel } = parseQuickAdd(raw);
+    if (!title || !selected) return false;
+    patchTasks((ts) => [...ts, migrateTask({ id: uid(), title, done: false, deadline: todayISO(), createdAt: Date.now(), timeLabel })]);
     return true;
   };
   const addNoiseText = (text) => {
@@ -1340,6 +813,43 @@ function ProjectDashboard() {
       return { ...p, notes: ns };
     })));
   };
+
+  /* ---- Notes screen actions — must NOT touch `selected` (it can be stale on other screens) ---- */
+  const addStandaloneNote = (text) => {
+    const clean = text.trim();
+    if (!clean) return false;
+    updateNotes((ns) => [...ns, { id: uid(), text: textToHtml(clean), createdAt: Date.now() }]);
+    return true;
+  };
+  const addStandaloneImageNotes = async (files) => {
+    for (const f of files) {
+      if (!f.type.startsWith("image/")) continue;
+      try {
+        const dataUrl = await imageFileToDataURL(f);
+        updateNotes((ns) => [...ns, { id: uid(), text: `<img src="${dataUrl}">`, createdAt: Date.now() }]);
+      } catch (err) { /* unreadable file — skip */ }
+    }
+  };
+  const deleteNoteGlobalWithUndo = (note) => {
+    // Capture the note's home (root list or a specific project) at delete time.
+    const rootIdx = notesRef.current.findIndex((n) => n.id === note.id);
+    if (rootIdx !== -1) {
+      updateNotes((ns) => ns.filter((n) => n.id !== note.id));
+      showUndo("Note deleted", () => updateNotes((ns) => {
+        const out = [...ns]; out.splice(Math.min(rootIdx, out.length), 0, note); return out;
+      }));
+      return;
+    }
+    const proj = projectsRef.current.find((p) => p.notes.some((n) => n.id === note.id));
+    if (!proj) return;
+    const idx = proj.notes.findIndex((n) => n.id === note.id);
+    update((prev) => prev.map((p) => (p.id === proj.id ? { ...p, notes: p.notes.filter((n) => n.id !== note.id) } : p)));
+    showUndo("Note deleted", () => update((prev) => prev.map((p) => {
+      if (p.id !== proj.id) return p;
+      const ns = [...p.notes]; ns.splice(Math.min(idx, ns.length), 0, note);
+      return { ...p, notes: ns };
+    })));
+  };
   const deleteProjectWithUndo = () => {
     const proj = selected;
     const idx = projects.findIndex((p) => p.id === proj.id);
@@ -1353,7 +863,7 @@ function ProjectDashboard() {
 
   /* ---- export / import ---- */
   const exportData = () => {
-    const blob = new Blob([JSON.stringify({ projects }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ projects, inbox, notes }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `projects-export-${todayISO()}.json`;
@@ -1368,16 +878,25 @@ function ProjectDashboard() {
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
-      const incoming = (parsed.projects || []).map(migrate);
-      if (!incoming.length) { setImportNote("That file has no projects in it."); return; }
+      const incoming = {
+        projects: (parsed.projects || []).map(migrate),
+        inbox: (parsed.inbox || []).map(migrateTask),
+        notes: parsed.notes || [],
+      };
+      if (!incoming.projects.length && !incoming.inbox.length && !incoming.notes.length) {
+        setImportNote("That file has no projects, tasks, or notes in it."); return;
+      }
       setPendingImport(incoming);
     } catch (err) {
       setImportNote("Couldn't read that file — make sure it's a projects-export .json file.");
     }
   };
   const confirmImport = () => {
-    const n = pendingImport.length;
-    update(() => pendingImport);
+    const n = pendingImport.projects.length;
+    update(() => pendingImport.projects);
+    updateInbox(() => pendingImport.inbox);
+    updateNotes(() => pendingImport.notes);
+    setSelectedId(null);
     setPendingImport(null);
     setImportNote(`Imported ${n} project${n !== 1 ? "s" : ""}.`);
     setTimeout(() => setImportNote(""), 3000);
@@ -1453,7 +972,7 @@ function ProjectDashboard() {
     const onKey = (e) => {
       const tag = e.target.tagName;
       const typing = tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); searchRef.current?.focus(); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPaletteOpen(true); return; }
       if (typing) return;
       if (e.key === "/") { e.preventDefault(); searchRef.current?.focus(); }
       if (e.key === "n" && selectedIdRef.current) { e.preventDefault(); quickAddRef.current?.focus(); }
@@ -1488,24 +1007,80 @@ function ProjectDashboard() {
   const activeTasks = selected ? selected.tasks.filter((t) => !t.done) : [];
   const completedTasks = selected ? selected.tasks.filter((t) => t.done) : [];
 
+  const longDateToday = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+
   return (
     <div className={`pd-app ${selected ? "detail-open" : ""}`}>
       <style>{css}</style>
 
-      <div className="pd-topbar">
-        <div className="pd-title">Projects<span>.</span></div>
-        <div className="pd-overall">
-          <div className="pd-overall-bar"><div className="pd-overall-fill" style={{ width: `${overallPct}%` }} /></div>
-          <span className="pd-overall-label">
-            {allTasks.length ? `${overallPct}% overall · ${projects.length} project${projects.length !== 1 ? "s" : ""}` : "no tasks yet"}
-          </span>
-        </div>
-      </div>
+      <div className="pd-shell">
+        {!isMobile && (
+          <Sidebar screen={screen} navItems={NAV_ITEMS} onNavigate={setScreen}
+            projects={projects} onOpenProject={openProject}
+            onOpenPalette={() => setPaletteOpen(true)}
+            collapsed={sidebarCollapsed} onToggleCollapsed={toggleSidebarCollapsed} />
+        )}
 
+        <div className="pd-main">
+          <div className="pd-topbar">
+            {screen === "projects" ? (
+              <>
+                <div className="pd-title">Projects<span>.</span></div>
+                <div className="pd-overall">
+                  <div className="pd-overall-bar"><div className="pd-overall-fill" style={{ width: `${overallPct}%` }} /></div>
+                  <span className="pd-overall-label">
+                    {allTasks.length ? `${overallPct}% overall · ${projects.length} project${projects.length !== 1 ? "s" : ""}` : "no tasks yet"}
+                  </span>
+                </div>
+              </>
+            ) : screen === "brain" ? (
+              <>
+                <div className="pd-title">{SCREEN_TITLES[screen]}</div>
+                <div className="pd-topbar-quickadd-wrap">
+                  <input className="pd-topbar-quickadd" placeholder="Capture a thought and press Enter…"
+                    value={brainInput} onChange={(e) => setBrainInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && addStandaloneNote(brainInput)) setBrainInput(""); }} />
+                </div>
+                <div className="pd-topbar-date">{longDateToday}</div>
+              </>
+            ) : (
+              <>
+                <div className="pd-title">{screen === "today" ? greeting : SCREEN_TITLES[screen]}</div>
+                <div className="pd-topbar-quickadd-wrap">
+                  <input className="pd-topbar-quickadd" placeholder='Add a task…  try "call mom tomorrow 5pm"'
+                    value={inboxInput} onChange={(e) => setInboxInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && addInboxTask(inboxInput)) setInboxInput(""); }} />
+                </div>
+                <div className="pd-topbar-date">{longDateToday}</div>
+              </>
+            )}
+          </div>
+
+          <div className="pd-screen">
+            {screen === "today" && (
+              <TodayScreen projects={projects} inbox={inbox} runningTaskId={runningTaskId} runStart={runStart} tick={tick}
+                completionLog={completionLog} focusLog={focusLog}
+                onToggle={toggleTaskDone} onCyclePriority={cycleTaskPriority} onToggleTrack={toggleTrack} />
+            )}
+            {screen === "brain" && (
+              <BrainScreen projects={projects} notes={notes} isMobile={isMobile}
+                onSaveNote={(id, text) => locateAndPatchNote(id, (n) => ({ ...n, text }))}
+                onDeleteNote={deleteNoteGlobalWithUndo}
+                onDropImages={addStandaloneImageNotes} />
+            )}
+            {screen === "calendar" && (
+              <CalendarScreen projects={projects} inbox={inbox} isMobile={isMobile}
+                onOpenProject={openProject}
+                onOpenTask={(t) => setEditingTaskId(t.id)} />
+            )}
+            {screen === "stats" && (
+              <StatsScreen completionLog={completionLog} focusLog={focusLog} runningTaskId={runningTaskId} runStart={runStart} tick={tick} />
+            )}
+            {screen === "projects" && (
       <div className="pd-body">
         {/* left: dashboard */}
         <div className="pd-left">
-          <input ref={searchRef} className="pd-search" enterKeyHint="search" placeholder="Search projects, tasks, notes…  ( / )"
+          <input ref={searchRef} className="pd-search" enterKeyHint="search" placeholder="Search projects, tasks, Brain entries  ( / )"
             value={query} onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Escape") { setQuery(""); e.target.blur(); } }} />
 
@@ -1522,7 +1097,7 @@ function ProjectDashboard() {
           {importNote && <div className={`pd-import-note ${pendingImport ? "" : "err"}`}>{importNote}</div>}
           {pendingImport && (
             <div className="pd-import-banner">
-              <p>Import {pendingImport.length} project{pendingImport.length !== 1 ? "s" : ""}? This replaces everything currently in this app.</p>
+              <p>Import {pendingImport.projects.length} project{pendingImport.projects.length !== 1 ? "s" : ""}? This replaces everything currently in this app.</p>
               <div className="pd-form-row">
                 <button className="pd-btn" onClick={confirmImport}>Replace with imported data</button>
                 <button className="pd-btn ghost" onClick={() => setPendingImport(null)}>Cancel</button>
@@ -1589,7 +1164,7 @@ function ProjectDashboard() {
           style={edgeDx > 0 ? { transform: `translateX(${edgeDx}px)` } : undefined}
           onTouchStart={onDetailTouchStart} onTouchMove={onDetailTouchMove} onTouchEnd={onDetailTouchEnd}>
           {!selected ? (
-            <p className="pd-empty">Select a project to see its tasks and brain noises.</p>
+            <p className="pd-empty">Select a project or create one above.</p>
           ) : (
             <>
               <button className="pd-back pd-press" onClick={() => setSelectedId(null)}>← all projects</button>
@@ -1644,10 +1219,12 @@ function ProjectDashboard() {
                 <ul className="pd-tasklist">
                   {activeTasks.map((t) => (
                     <TaskRow key={t.id} task={t} color={selColor} isMobile={isMobile} completed={false}
-                      onToggle={() => patchTasks((ts) => ts.map((x) => x.id === t.id ? { ...x, done: !x.done } : x))}
+                      onToggle={() => toggleTaskDone(t.id)}
                       onDelete={() => deleteTaskWithUndo(t)}
                       onTitle={(title) => patchTasks((ts) => ts.map((x) => x.id === t.id ? { ...x, title } : x))}
                       onDeadline={(iso) => patchTasks((ts) => ts.map((x) => x.id === t.id ? { ...x, deadline: iso } : x))}
+                      onCyclePriority={() => cycleTaskPriority(t.id)}
+                      onToggleRecurring={() => toggleTaskRecurring(t.id)}
                       reorderUp={() => patchTasks((ts) => moveBy(ts, t.id, -1))}
                       reorderDown={() => patchTasks((ts) => moveBy(ts, t.id, 1))}
                       canUp={activeTasks[0]?.id !== t.id}
@@ -1665,7 +1242,7 @@ function ProjectDashboard() {
                   {completedTasks.length > 0 && <li className="pd-tasksep">Completed</li>}
                   {completedTasks.map((t) => (
                     <TaskRow key={t.id} task={t} color={selColor} isMobile={isMobile} completed={true}
-                      onToggle={() => patchTasks((ts) => ts.map((x) => x.id === t.id ? { ...x, done: !x.done } : x))}
+                      onToggle={() => toggleTaskDone(t.id)}
                       onDelete={() => deleteTaskWithUndo(t)}
                       onTitle={(title) => patchTasks((ts) => ts.map((x) => x.id === t.id ? { ...x, title } : x))}
                       onDeadline={() => {}} />
@@ -1708,6 +1285,21 @@ function ProjectDashboard() {
           )}
         </div>
       </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {isMobile && (
+        <nav className="pd-tabbar">
+          {NAV_ITEMS.map((n) => (
+            <button key={n.key} type="button" className={`pd-tabbar-btn ${screen === n.key ? "active" : ""}`} onClick={() => setScreen(n.key)}>
+              <span className={`pd-navicon pd-navicon-${n.icon}`} />
+              <span className="pd-tabbar-label">{n.label}</span>
+            </button>
+          ))}
+        </nav>
+      )}
 
       {/* undo toast */}
       {toast && (
@@ -1717,6 +1309,23 @@ function ProjectDashboard() {
           <button onClick={runUndo}>Undo</button>
         </div>
       )}
+
+      {editingTask && (
+        <TaskEditModal task={editingTask} onClose={() => setEditingTaskId(null)}
+          onTitle={editTaskTitle} onDeadline={editTaskDeadline}
+          onCyclePriority={() => cycleTaskPriority(editingTask.id)}
+          onToggleRecurring={() => toggleTaskRecurring(editingTask.id)}
+          onToggleDone={() => toggleTaskDone(editingTask.id)}
+          onDelete={deleteEditingTask} />
+      )}
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)}
+        projects={projects} inbox={inbox}
+        onNavigateScreen={(key) => setScreen(key)}
+        onOpenProject={openProject}
+        onOpenTask={(t) => setEditingTaskId(t.id)}
+        onAddTask={(title) => addInboxTask(title)}
+        onNewProject={startNewProject} />
     </div>
   );
 }
@@ -1727,27 +1336,27 @@ function ProjectDashboard() {
 const gateCss = `
 .pd-gate{
   position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-  background:#14181E; color:#E8ECF1; font-family:'Inter',system-ui,sans-serif; padding:24px;
+  background:#050505; color:#F5F6F1; font-family:'Plus Jakarta Sans',system-ui,sans-serif; padding:24px;
   padding-top:max(24px, env(safe-area-inset-top)); -webkit-tap-highlight-color:transparent;
 }
 .pd-gate-card{width:100%; max-width:340px; text-align:center;}
-.pd-gate-title{font-family:'Archivo',sans-serif; font-weight:800; font-size:22px; margin-bottom:6px;}
-.pd-gate-title span{color:#E9B44C;}
-.pd-gate-sub{color:#8C96A3; font-size:13px; margin-bottom:22px;}
+.pd-gate-title{font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:22px; margin-bottom:6px;}
+.pd-gate-title span{color:#FF5A2E;}
+.pd-gate-sub{color:#8B8E93; font-size:13px; margin-bottom:22px;}
 .pd-gate-input{
-  width:100%; padding:11px 14px; font-size:16px; border:1px solid #2C343E; border-radius:10px;
-  background:#212933; color:#E8ECF1; margin-bottom:10px;
+  width:100%; padding:11px 14px; font-size:16px; border:1px solid #26282C; border-radius:14px;
+  background:#1D1F22; color:#F5F6F1; margin-bottom:10px;
 }
-.pd-gate-input:focus{outline:none; border-color:#E9B44C;}
+.pd-gate-input:focus{outline:none; border-color:#FF5A2E;}
 .pd-gate-btn{
-  width:100%; border:none; background:#E9B44C; color:#1A1300; border-radius:10px; padding:12px 14px;
-  font-size:14px; font-weight:600; cursor:pointer;
+  width:100%; border:none; background:#FF5A2E; color:#0A0A0A; border-radius:14px; padding:12px 14px;
+  font-size:14px; font-weight:700; cursor:pointer;
 }
 .pd-gate-btn:active{transform:scale(.98);}
 .pd-gate-btn:disabled{opacity:.6; cursor:default;}
-.pd-gate-msg{font-size:12px; color:#8C96A3; margin-top:14px; font-family:'IBM Plex Mono',monospace;}
-.pd-gate-msg.err{color:#E06A87;}
-.pd-gate-link{background:none; border:none; color:#E9B44C; cursor:pointer; font-family:inherit; font-size:inherit; text-decoration:underline; padding:0;}
+.pd-gate-msg{font-size:12px; color:#8B8E93; margin-top:14px; font-family:'IBM Plex Mono',monospace;}
+.pd-gate-msg.err{color:#FF6B85;}
+.pd-gate-link{background:none; border:none; color:#FF5A2E; cursor:pointer; font-family:inherit; font-size:inherit; text-decoration:underline; padding:0;}
 .pd-gate-link:disabled{opacity:.5; cursor:default;}
 `;
 
@@ -1831,5 +1440,5 @@ export default function App() {
     return <div className="pd-gate"><style>{gateCss}</style></div>;
   }
   if (!session) return <LoginGate />;
-  return <ProjectDashboard />;
+  return <AppShell />;
 }
