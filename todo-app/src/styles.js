@@ -157,6 +157,15 @@ button{touch-action:manipulation;}
 .pd-dp-cell.muted{color:var(--muted); opacity:.5;}
 .pd-dp-cell.today{box-shadow:inset 0 0 0 1px var(--accent);}
 .pd-dp-cell.selected{background:var(--accent); color:var(--accent-ink); font-weight:600;}
+.pd-dp-time-row{
+  display:flex; align-items:center; gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid var(--line);
+}
+.pd-dp-time-input{
+  flex:1; min-width:0; background:var(--raised); border:1px solid var(--line); border-radius:var(--r-sm);
+  color:var(--ink); font-family:'IBM Plex Mono',monospace; font-size:12px; padding:6px 8px;
+}
+.pd-dp-time-input:focus{outline:none; border-color:var(--accent);}
+.pd-dp-time-sep{color:var(--muted); font-size:12px; flex-shrink:0;}
 .pd-dp-foot{display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid var(--line);}
 .pd-dp-link{background:none; border:none; color:var(--accent); font-size:12px; cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; padding:8px;}
 .pd-dp-link:hover{text-decoration:underline;}

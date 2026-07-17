@@ -40,6 +40,23 @@ export function fmtDate(iso) {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 }
+// "14:00" -> "2PM", "14:30" -> "2:30PM" — matches the compact style parseQuickAdd already uses.
+export function formatClockTime(hhmm) {
+  if (!hhmm) return null;
+  const [h, m] = hhmm.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return m ? `${h12}:${pad(m)}${period}` : `${h12}${period}`;
+}
+// Prefers the explicit start/end time fields; falls back to the legacy quick-add timeLabel.
+export function taskTimeRangeLabel(t) {
+  if (t.startTime) {
+    const s = formatClockTime(t.startTime);
+    const e = t.endTime ? formatClockTime(t.endTime) : null;
+    return e ? `${s}–${e}` : s;
+  }
+  return t.timeLabel || null;
+}
 export function nextDue(p) {
   const dates = p.tasks.filter((t) => !t.done && t.deadline).map((t) => t.deadline);
   if (!dates.length) return null;

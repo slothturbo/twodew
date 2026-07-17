@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { todayISO, colorOf, pad, MONTHS, DOW } from "../lib/helpers";
+import { todayISO, colorOf, pad, MONTHS, DOW, taskTimeRangeLabel } from "../lib/helpers";
 
 const INBOX_COLOR = { fg: "var(--muted)", bg: "rgba(140,150,163,0.12)" };
 
@@ -30,7 +30,8 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
     return Array.from({ length: 42 }, (_, i) => {
       const d = new Date(gridStart); d.setDate(gridStart.getDate() + i);
       const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-      return { date: d, iso, inMonth: d.getMonth() === viewM, items: byDate[iso] || [] };
+      const items = [...(byDate[iso] || [])].sort((a, b) => (a.startTime || "99:99").localeCompare(b.startTime || "99:99"));
+      return { date: d, iso, inMonth: d.getMonth() === viewM, items };
     });
   }, [viewY, viewM, byDate]);
 
@@ -65,11 +66,12 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
               <div className="pd-cal-agenda-items">
                 {day.items.map((t) => {
                   const col = t.projectColor || INBOX_COLOR;
+                  const time = taskTimeRangeLabel(t);
                   return (
                     <button key={t.id} type="button" className="pd-cal-agenda-row" style={{ borderLeftColor: col.fg }}
                       onClick={() => (t.projectId ? onOpenProject(t.projectId) : onOpenTask(t))}>
                       <span className="pd-cal-agenda-title">{t.title}</span>
-                      <span className="pd-cal-agenda-meta">{t.projectName || "Inbox"}</span>
+                      <span className="pd-cal-agenda-meta">{time ? `${time} · ` : ""}{t.projectName || "Inbox"}</span>
                     </button>
                   );
                 })}

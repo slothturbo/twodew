@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { storage } from "./lib/storage";
 import { supabase } from "./supabaseClient";
 import { css } from "./styles";
@@ -15,7 +16,7 @@ import { StatsScreen } from "./screens/Stats";
 import {
   uid, pad, todayISO, localDateISO, colorOf, progressOf, dueLabel, fmtDate, nextDue, startedLabel,
   PRIORITY_CYCLE, PRIORITY_COLOR, liveTaskSeconds, formatDuration, currentStreak, weekBars, heatmapCells,
-  parseQuickAdd, attentionSort, moveItem, moveBy, PALETTE, DOW, MONTHS,
+  parseQuickAdd, attentionSort, moveItem, moveBy, taskTimeRangeLabel, PALETTE, DOW, MONTHS,
 } from "./lib/helpers";
 
 /* ------------------------------------------------------------------ */
@@ -41,6 +42,8 @@ function migrateTask(t) {
     trackedSeconds: 0,
     completedAt: null,
     timeLabel: null,
+    startTime: null,
+    endTime: null,
     subtasks: [],
     ...t,
   };
@@ -82,7 +85,8 @@ function migrateRoot(data) {
 /* ------------------------------------------------------------------ */
 /*  Custom themed date picker (viewport-clamped)                       */
 /* ------------------------------------------------------------------ */
-function DatePicker({ value, onChange, placeholder = "Set date" }) {
+function DatePicker({ value, onChange, placeholder = "Set date", startTime, endTime, onStartTime, onEndTime }) {
+  const showTime = !!onStartTime;
   const [open, setOpen] = useState(false);
   const base = value ? new Date(value + "T00:00:00") : new Date();
   const [viewY, setViewY] = useState(base.getFullYear());
@@ -104,7 +108,7 @@ function DatePicker({ value, onChange, placeholder = "Set date" }) {
 
   useEffect(() => {
     if (!open || !btnRef.current) return;
-    const POP_W = 280, POP_H = 360, margin = 8;
+    const POP_W = 280, POP_H = showTime && value ? 410 : 360, margin = 8;
     const place = () => {
       const r = btnRef.current.getBoundingClientRect();
       let left = r.left;
@@ -142,12 +146,14 @@ function DatePicker({ value, onChange, placeholder = "Set date" }) {
     setViewM(m); setViewY(y);
   };
 
+  const timeLabel = showTime && value ? taskTimeRangeLabel({ startTime, endTime }) : null;
+
   return (
     <div className="pd-dp-wrap" ref={ref}>
       <button type="button" ref={btnRef} className={`pd-dp-btn pd-press ${!value ? "empty" : ""}`} onClick={() => setOpen((o) => !o)}>
-        📅 {value ? fmtDate(value) : placeholder}
+        📅 {value ? fmtDate(value) : placeholder}{timeLabel ? ` · ${timeLabel}` : ""}
       </button>
-      {open && (
+      {open && createPortal(
         <div className="pd-dp-pop" ref={popRef} role="dialog" aria-label="Choose date"
           style={pos ? { position: "fixed", top: pos.top, left: pos.left } : { visibility: "hidden" }}>
           <div className="pd-dp-head">
@@ -165,17 +171,28 @@ function DatePicker({ value, onChange, placeholder = "Set date" }) {
               return (
                 <button type="button" key={i}
                   className={`pd-dp-cell ${muted ? "muted" : ""} ${iso === todayIso ? "today" : ""} ${iso === value ? "selected" : ""}`}
-                  onClick={() => { onChange(iso); setViewM(d.getMonth()); setViewY(d.getFullYear()); setOpen(false); }}>
+                  onClick={() => { onChange(iso); setViewM(d.getMonth()); setViewY(d.getFullYear()); if (!showTime) setOpen(false); }}>
                   {d.getDate()}
                 </button>
               );
             })}
           </div>
+          {showTime && value && (
+            <div className="pd-dp-time-row">
+              <input type="time" className="pd-dp-time-input" value={startTime || ""} aria-label="Start time"
+                onChange={(e) => onStartTime(e.target.value || null)} />
+              <span className="pd-dp-time-sep">–</span>
+              <input type="time" className="pd-dp-time-input" value={endTime || ""} aria-label="End time"
+                onChange={(e) => onEndTime(e.target.value || null)} />
+            </div>
+          )}
           <div className="pd-dp-foot">
-            <button type="button" className="pd-dp-link" onClick={() => { onChange(null); setOpen(false); }}>Clear</button>
-            <button type="button" className="pd-dp-link" onClick={() => { onChange(todayIso); setOpen(false); }}>Today</button>
+            <button type="button" className="pd-dp-link" onClick={() => { onChange(null); onStartTime?.(null); onEndTime?.(null); setOpen(false); }}>Clear</button>
+            <button type="button" className="pd-dp-link" onClick={() => { onChange(todayIso); if (!showTime) setOpen(false); }}>Today</button>
+            {showTime && <button type="button" className="pd-dp-link" onClick={() => setOpen(false)}>Done</button>}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -291,7 +308,7 @@ function Timeline({ projects, selectedId, onSelect }) {
 /*  Task row with swipe gestures (mobile) + HTML5 drag (desktop)       */
 /* ------------------------------------------------------------------ */
 function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle, onDeadline,
-  onCyclePriority, onToggleRecurring, dragHandlers, reorderUp, reorderDown, canUp, canDown, touchReorderStart, dragClass }) {
+  onStartTime, onEndTime, onCyclePriority, onToggleRecurring, dragHandlers, reorderUp, reorderDown, canUp, canDown, touchReorderStart, dragClass }) {
   const [dx, setDx] = useState(0);
   const [snap, setSnap] = useState(false);
   const start = useRef(null);
@@ -366,7 +383,10 @@ function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.target.blur(); }} aria-label="Task title" />
         <div className="pd-task-meta">
           {due && <span className={`pd-task-due ${due.overdue ? "overdue" : ""}`}>{due.text}</span>}
-          {!completed && <DatePicker value={task.deadline} onChange={onDeadline} />}
+          {!completed && (
+            <DatePicker value={task.deadline} onChange={onDeadline}
+              startTime={task.startTime} endTime={task.endTime} onStartTime={onStartTime} onEndTime={onEndTime} />
+          )}
           {!completed && onToggleRecurring && (
             <button type="button" className={`pd-recur-toggle ${task.recurring ? "on" : ""}`} title="Repeats daily"
               onClick={onToggleRecurring} aria-label={task.recurring ? "Stop repeating daily" : "Repeat daily"}>↻</button>
@@ -382,7 +402,7 @@ function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle
 /*  Single-task editor — for inbox tasks reached from the Calendar,     */
 /*  which have no project page of their own to land on.                 */
 /* ------------------------------------------------------------------ */
-function TaskEditModal({ task, onClose, onTitle, onDeadline, onCyclePriority, onToggleRecurring, onToggleDone, onDelete }) {
+function TaskEditModal({ task, onClose, onTitle, onDeadline, onStartTime, onEndTime, onCyclePriority, onToggleRecurring, onToggleDone, onDelete }) {
   return (
     <div className="pd-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="pd-panel" role="dialog" aria-modal="true" aria-label="Task details" style={{ height: "auto" }}>
@@ -405,7 +425,8 @@ function TaskEditModal({ task, onClose, onTitle, onDeadline, onCyclePriority, on
               onChange={(e) => onTitle(e.target.value)} aria-label="Task title" />
           </div>
           <div className="pd-form-row">
-            <DatePicker value={task.deadline} onChange={onDeadline} />
+            <DatePicker value={task.deadline} onChange={onDeadline}
+              startTime={task.startTime} endTime={task.endTime} onStartTime={onStartTime} onEndTime={onEndTime} />
             <button type="button" className={`pd-recur-toggle ${task.recurring ? "on" : ""}`} style={{ opacity: 1 }}
               onClick={onToggleRecurring} title="Repeats daily">
               ↻ {task.recurring ? "Repeats daily" : "One-time"}
@@ -699,6 +720,12 @@ function AppShell() {
   }, [updateInbox, editingTaskId]);
   const editTaskDeadline = useCallback((iso) => {
     updateInbox((ts) => ts.map((t) => (t.id === editingTaskId ? { ...t, deadline: iso } : t)));
+  }, [updateInbox, editingTaskId]);
+  const editTaskStartTime = useCallback((v) => {
+    updateInbox((ts) => ts.map((t) => (t.id === editingTaskId ? { ...t, startTime: v } : t)));
+  }, [updateInbox, editingTaskId]);
+  const editTaskEndTime = useCallback((v) => {
+    updateInbox((ts) => ts.map((t) => (t.id === editingTaskId ? { ...t, endTime: v } : t)));
   }, [updateInbox, editingTaskId]);
   const deleteEditingTask = useCallback(() => {
     updateInbox((ts) => ts.filter((t) => t.id !== editingTaskId));
@@ -1223,6 +1250,8 @@ function AppShell() {
                       onDelete={() => deleteTaskWithUndo(t)}
                       onTitle={(title) => patchTasks((ts) => ts.map((x) => x.id === t.id ? { ...x, title } : x))}
                       onDeadline={(iso) => patchTasks((ts) => ts.map((x) => x.id === t.id ? { ...x, deadline: iso } : x))}
+                      onStartTime={(v) => patchTasks((ts) => ts.map((x) => x.id === t.id ? { ...x, startTime: v } : x))}
+                      onEndTime={(v) => patchTasks((ts) => ts.map((x) => x.id === t.id ? { ...x, endTime: v } : x))}
                       onCyclePriority={() => cycleTaskPriority(t.id)}
                       onToggleRecurring={() => toggleTaskRecurring(t.id)}
                       reorderUp={() => patchTasks((ts) => moveBy(ts, t.id, -1))}
@@ -1313,6 +1342,7 @@ function AppShell() {
       {editingTask && (
         <TaskEditModal task={editingTask} onClose={() => setEditingTaskId(null)}
           onTitle={editTaskTitle} onDeadline={editTaskDeadline}
+          onStartTime={editTaskStartTime} onEndTime={editTaskEndTime}
           onCyclePriority={() => cycleTaskPriority(editingTask.id)}
           onToggleRecurring={() => toggleTaskRecurring(editingTask.id)}
           onToggleDone={() => toggleTaskDone(editingTask.id)}

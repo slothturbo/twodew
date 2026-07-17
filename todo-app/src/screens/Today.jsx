@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import {
   todayISO, dueLabel, PRIORITY_COLOR, liveTaskSeconds, formatDuration, currentStreak,
-  computeTodayView, computeUpcoming,
+  computeTodayView, computeUpcoming, taskTimeRangeLabel,
 } from "../lib/helpers";
 
 function TodayTaskRow({ task, running, liveSeconds, onToggle, onCyclePriority, onToggleTrack }) {
@@ -20,7 +20,7 @@ function TodayTaskRow({ task, running, liveSeconds, onToggle, onCyclePriority, o
       <div className="pd-today-info">
         <div className={`pd-today-title ${task.done ? "done" : ""}`}>{task.title}</div>
         <div className="pd-today-meta">
-          <span>{task.timeLabel || "Today"}</span>
+          <span>{taskTimeRangeLabel(task) || "Today"}</span>
           {task.projectName && <span>· {task.projectName}</span>}
           {task.recurring && <span title="Repeats daily">↻</span>}
           {subtaskLabel && <span>{subtaskLabel}</span>}
@@ -90,7 +90,7 @@ export function TodayScreen({ projects, inbox, runningTaskId, runStart, tick, co
                     <div className="pd-priority-dot" style={{ background: PRIORITY_COLOR[t.priority || "med"], marginTop: 0 }} />
                     <div className="pd-upcoming-info">
                       <div className="pd-upcoming-title">{t.title}</div>
-                      <div className="pd-upcoming-meta">{t.projectName || "Inbox"}</div>
+                      <div className="pd-upcoming-meta">{taskTimeRangeLabel(t) ? `${taskTimeRangeLabel(t)} · ` : ""}{t.projectName || "Inbox"}</div>
                     </div>
                     {due && <div className={`pd-upcoming-due ${due.overdue ? "overdue" : ""}`}>{due.text}</div>}
                   </li>
