@@ -442,7 +442,7 @@ function TaskEditModal({ task, onClose, onTitle, onDeadline, onStartTime, onEndT
 /* ------------------------------------------------------------------ */
 /*  Main app                                                           */
 /* ------------------------------------------------------------------ */
-function AppShell() {
+function AppShell({ userId }) {
   const [projects, setProjects] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -510,6 +510,7 @@ function AppShell() {
   const selectedIdRef = useRef(null);
   const touchDrag = useRef(null);
   const tickTimer = useRef(null);
+  const lastWrittenAtRef = useRef(null);
   selectedIdRef.current = selectedId;
 
   // Mirror the redesign's root-level state into refs so the debounced persist() below
@@ -523,30 +524,41 @@ function AppShell() {
   const runningTaskIdRef = useRef(runningTaskId); runningTaskIdRef.current = runningTaskId;
   const runStartRef = useRef(runStart); runStartRef.current = runStart;
 
+  // Applies a full data blob to state — used both for the initial load and for
+  // remote changes that arrive over the Realtime subscription below. `restoreSelection`
+  // is only true on initial load: a live remote update shouldn't yank the project
+  // you're currently looking at just because another device last had something else open.
+  const applyData = useCallback((data, { restoreSelection = false } = {}) => {
+    const projs = (data.projects || []).map(migrate);
+    setProjects(projs); projectsRef.current = projs;
+    if (restoreSelection && data.lastSelectedId && projs.some((p) => p.id === data.lastSelectedId) && !window.matchMedia("(max-width: 860px)").matches) {
+      setSelectedId(data.lastSelectedId);
+    }
+    const root = migrateRoot(data);
+    setInbox(root.inbox); inboxRef.current = root.inbox;
+    setNotes(root.notes); notesRef.current = root.notes;
+    setCompletionLog(root.completionLog); completionLogRef.current = root.completionLog;
+    setFocusLog(root.focusLog); focusLogRef.current = root.focusLog;
+    setLastResetDate(root.lastResetDate); lastResetDateRef.current = root.lastResetDate;
+    if (root.runningTaskId && root.runStart) {
+      setRunningTaskId(root.runningTaskId); runningTaskIdRef.current = root.runningTaskId;
+      setRunStart(root.runStart); runStartRef.current = root.runStart;
+      clearInterval(tickTimer.current);
+      tickTimer.current = setInterval(() => setTick((t) => t + 1), 1000);
+    } else {
+      setRunningTaskId(null); runningTaskIdRef.current = null;
+      setRunStart(null); runStartRef.current = null;
+      clearInterval(tickTimer.current);
+    }
+  }, []);
+
   /* ---- load ---- */
   useEffect(() => {
     (async () => {
       try {
         const res = await storage.get(STORAGE_KEY);
         if (res && res.value) {
-          const data = JSON.parse(res.value);
-          const projs = (data.projects || []).map(migrate);
-          setProjects(projs); projectsRef.current = projs;
-          if (data.lastSelectedId && projs.some((p) => p.id === data.lastSelectedId) && !window.matchMedia("(max-width: 860px)").matches) {
-            setSelectedId(data.lastSelectedId);
-          }
-          const root = migrateRoot(data);
-          setInbox(root.inbox); inboxRef.current = root.inbox;
-          setNotes(root.notes); notesRef.current = root.notes;
-          setCompletionLog(root.completionLog); completionLogRef.current = root.completionLog;
-          setFocusLog(root.focusLog); focusLogRef.current = root.focusLog;
-          setLastResetDate(root.lastResetDate); lastResetDateRef.current = root.lastResetDate;
-          if (root.runningTaskId && root.runStart) {
-            setRunningTaskId(root.runningTaskId); runningTaskIdRef.current = root.runningTaskId;
-            setRunStart(root.runStart); runStartRef.current = root.runStart;
-            clearInterval(tickTimer.current);
-            tickTimer.current = setInterval(() => setTick((t) => t + 1), 1000);
-          }
+          applyData(JSON.parse(res.value), { restoreSelection: true });
         } else {
           const today = todayISO();
           setLastResetDate(today); lastResetDateRef.current = today;
@@ -555,7 +567,29 @@ function AppShell() {
       setLoaded(true);
     })();
     return () => clearInterval(tickTimer.current);
-  }, []);
+  }, [applyData]);
+
+  /* ---- live sync: pick up changes made on another device within ~1s ---- */
+  useEffect(() => {
+    if (!loaded || !userId) return;
+    const channel = supabase
+      .channel(`kv_store_${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "kv_store", filter: `user_id=eq.${userId}` },
+        (payload) => {
+          const row = payload.new;
+          if (!row || row.key !== STORAGE_KEY) return;
+          if (lastWrittenAtRef.current && row.updated_at === lastWrittenAtRef.current) return; // our own write echoing back
+          applyData(row.value);
+          setSavedFlash("synced from another device");
+          clearTimeout(flashTimer.current);
+          flashTimer.current = setTimeout(() => setSavedFlash(""), 2000);
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [loaded, userId, applyData]);
 
   /* ---- debounced save (whole root blob: projects, inbox, logs, timer, last selected) ---- */
   const persist = useCallback(() => {
@@ -573,7 +607,8 @@ function AppShell() {
           runStart: runStartRef.current,
           lastSelectedId: selectedIdRef.current,
         });
-        await storage.set(STORAGE_KEY, blob);
+        const res = await storage.set(STORAGE_KEY, blob);
+        if (res?.updatedAt) lastWrittenAtRef.current = res.updatedAt;
         clearTimeout(flashTimer.current);
         if (blob.length > 2_500_000) {
           // Inline images are the usual culprit — surface it before saves get sluggish.
@@ -1470,5 +1505,5 @@ export default function App() {
     return <div className="pd-gate"><style>{gateCss}</style></div>;
   }
   if (!session) return <LoginGate />;
-  return <AppShell />;
+  return <AppShell userId={session.user.id} />;
 }

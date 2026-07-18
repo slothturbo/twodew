@@ -26,14 +26,15 @@ export const storage = {
     if (!user) return null;
 
     const parsed = JSON.parse(value);
+    const updatedAt = new Date().toISOString();
     const { error } = await supabase
       .from("kv_store")
       .upsert(
-        { user_id: user.id, key, value: parsed, updated_at: new Date().toISOString() },
+        { user_id: user.id, key, value: parsed, updated_at: updatedAt },
         { onConflict: "user_id,key" }
       );
 
     if (error) throw error;
-    return { key, value };
+    return { key, value, updatedAt };
   },
 };

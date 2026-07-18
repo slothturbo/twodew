@@ -17,3 +17,8 @@ on kv_store
 for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+-- Live sync across devices: without this, editing on one device won't reach
+-- another device open at the same time until it's manually reloaded.
+-- Run this once too (safe to re-run — it just errors harmlessly if already added).
+alter publication supabase_realtime add table kv_store;
