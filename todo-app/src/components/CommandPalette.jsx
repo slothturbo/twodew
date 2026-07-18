@@ -3,6 +3,7 @@ import { colorOf } from "../lib/helpers";
 
 const SCREEN_RESULTS = [
   { key: "today", label: "Today" },
+  { key: "tasks", label: "Tasks" },
   { key: "brain", label: "Brain" },
   { key: "projects", label: "Projects" },
   { key: "calendar", label: "Calendar" },

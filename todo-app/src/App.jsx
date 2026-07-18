@@ -24,14 +24,16 @@ import {
 /* ------------------------------------------------------------------ */
 const STORAGE_KEY = "projects-data-v1";
 const OLD_HUES = ["#2E6BE6", "#0E8A7B", "#7A4FBF", "#C77D0A", "#C74A6B", "#3D7A2E"];
+const INBOX_COLOR = { fg: "var(--muted)", bg: "rgba(140,150,163,0.12)" };
 const NAV_ITEMS = [
   { key: "today", label: "Today", icon: "today" },
-  { key: "brain", label: "Brain", icon: "brain" },
+  { key: "tasks", label: "Tasks", icon: "tasks" },
   { key: "projects", label: "Projects", icon: "projects" },
+  { key: "brain", label: "Brain", icon: "brain" },
   { key: "calendar", label: "Calendar", icon: "calendar" },
   { key: "stats", label: "Insights", icon: "stats" },
 ];
-const SCREEN_TITLES = { today: "Today", brain: "Brain", projects: "Projects", calendar: "Calendar", stats: "Insights" };
+const SCREEN_TITLES = { today: "Today", tasks: "Tasks", brain: "Brain", projects: "Projects", calendar: "Calendar", stats: "Insights" };
 // Shared defaults for both project.tasks[] and the project-less inbox[] — additive only,
 // never fabricates completedAt/history for tasks that were already done pre-redesign.
 function migrateTask(t) {
@@ -308,7 +310,7 @@ function Timeline({ projects, selectedId, onSelect }) {
 /*  Task row with swipe gestures (mobile) + HTML5 drag (desktop)       */
 /* ------------------------------------------------------------------ */
 function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle, onDeadline,
-  onStartTime, onEndTime, onCyclePriority, onToggleRecurring, dragHandlers, reorderUp, reorderDown, canUp, canDown, touchReorderStart, dragClass }) {
+  onStartTime, onEndTime, onCyclePriority, onToggleRecurring, dragHandlers, reorderUp, reorderDown, canUp, canDown, touchReorderStart, dragClass, rkind = "task" }) {
   const [dx, setDx] = useState(0);
   const [snap, setSnap] = useState(false);
   const start = useRef(null);
@@ -342,7 +344,7 @@ function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle
   };
 
   return (
-    <li className="pd-task-outer" data-rid={task.id} data-rkind="task">
+    <li className="pd-task-outer" data-rid={task.id} data-rkind={rkind}>
       {isMobile && (
         <div className="pd-task-bg" aria-hidden="true">
           <span className="bg-done" style={{ opacity: Math.min(1, Math.max(0, dx / 80)) }}>✓</span>
@@ -359,7 +361,7 @@ function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle
           <>
             <span className="pd-drag-handle"
               onMouseDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => { e.stopPropagation(); touchReorderStart?.(e, task.id, "task"); }}>⠿</span>
+              onTouchStart={(e) => { e.stopPropagation(); touchReorderStart?.(e, task.id, rkind); }}>⠿</span>
             <div className="pd-reorder">
               <button onClick={reorderUp} disabled={!canUp} aria-label="Move up">▲</button>
               <button onClick={reorderDown} disabled={!canDown} aria-label="Move down">▼</button>
@@ -458,6 +460,8 @@ function AppShell({ userId }) {
   const [toast, setToast] = useState(null);
   const [dragTaskId, setDragTaskId] = useState(null);
   const [dragOverTaskId, setDragOverTaskId] = useState(null);
+  const [dragInboxTaskId, setDragInboxTaskId] = useState(null);
+  const [dragOverInboxTaskId, setDragOverInboxTaskId] = useState(null);
   const [dragNoteId, setDragNoteId] = useState(null);
   const [dragOverNoteId, setDragOverNoteId] = useState(null);
   const [touchDragId, setTouchDragId] = useState(null);
@@ -865,6 +869,14 @@ function AppShell({ userId }) {
       return { ...p, tasks: ts };
     })));
   };
+  const deleteInboxTaskWithUndo = (task) => {
+    const idx = inbox.findIndex((t) => t.id === task.id);
+    updateInbox((ts) => ts.filter((x) => x.id !== task.id));
+    showUndo("Task deleted", () => updateInbox((ts) => {
+      const next = [...ts]; next.splice(Math.min(idx, next.length), 0, task);
+      return next;
+    }));
+  };
   const deleteNoteWithUndo = (note) => {
     const projId = selected.id;
     const idx = selected.notes.findIndex((n) => n.id === note.id);
@@ -980,6 +992,8 @@ function AppShell({ userId }) {
       const { id: dragId, kind: k } = touchDrag.current;
       if (k === "task") {
         update((prev) => prev.map((p) => p.id === selectedIdRef.current ? { ...p, tasks: moveItem(p.tasks, dragId, overId) } : p));
+      } else if (k === "inboxtask") {
+        setInbox((prev) => { const next = moveItem(prev, dragId, overId); inboxRef.current = next; persist(); return next; });
       } else {
         update((prev) => prev.map((p) => p.id === selectedIdRef.current ? { ...p, notes: moveItem(p.notes, dragId, overId) } : p));
       }
@@ -994,7 +1008,7 @@ function AppShell({ userId }) {
     window.addEventListener("touchmove", move, { passive: false });
     window.addEventListener("touchend", end);
     window.addEventListener("touchcancel", end);
-  }, [update]);
+  }, [update, persist]);
 
   /* ---- edge swipe back (mobile) — pane follows the finger, velocity decides ---- */
   const edge = useRef(null);
@@ -1068,6 +1082,8 @@ function AppShell({ userId }) {
   const doneCount = selected ? selected.tasks.filter((t) => t.done).length : 0;
   const activeTasks = selected ? selected.tasks.filter((t) => !t.done) : [];
   const completedTasks = selected ? selected.tasks.filter((t) => t.done) : [];
+  const activeInboxTasks = inbox.filter((t) => !t.done);
+  const completedInboxTasks = inbox.filter((t) => t.done);
 
   const longDateToday = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 
@@ -1123,6 +1139,50 @@ function AppShell({ userId }) {
               <TodayScreen projects={projects} inbox={inbox} runningTaskId={runningTaskId} runStart={runStart} tick={tick}
                 completionLog={completionLog} focusLog={focusLog}
                 onToggle={toggleTaskDone} onCyclePriority={cycleTaskPriority} onToggleTrack={toggleTrack} />
+            )}
+            {screen === "tasks" && (
+              <div className="pd-tasks-screen">
+                {inbox.length === 0 ? (
+                  <p className="pd-empty">No standalone tasks yet — add one above and it'll show up here (it won't belong to any project).</p>
+                ) : (
+                  <ul className="pd-tasklist">
+                    {activeInboxTasks.map((t) => (
+                      <TaskRow key={t.id} task={t} color={INBOX_COLOR} isMobile={isMobile} completed={false} rkind="inboxtask"
+                        onToggle={() => toggleTaskDone(t.id)}
+                        onDelete={() => deleteInboxTaskWithUndo(t)}
+                        onTitle={(title) => updateInbox((ts) => ts.map((x) => x.id === t.id ? { ...x, title } : x))}
+                        onDeadline={(iso) => updateInbox((ts) => ts.map((x) => x.id === t.id ? { ...x, deadline: iso } : x))}
+                        onStartTime={(v) => updateInbox((ts) => ts.map((x) => x.id === t.id ? { ...x, startTime: v } : x))}
+                        onEndTime={(v) => updateInbox((ts) => ts.map((x) => x.id === t.id ? { ...x, endTime: v } : x))}
+                        onCyclePriority={() => cycleTaskPriority(t.id)}
+                        onToggleRecurring={() => toggleTaskRecurring(t.id)}
+                        reorderUp={() => updateInbox((ts) => moveBy(ts, t.id, -1))}
+                        reorderDown={() => updateInbox((ts) => moveBy(ts, t.id, 1))}
+                        canUp={activeInboxTasks[0]?.id !== t.id}
+                        canDown={activeInboxTasks[activeInboxTasks.length - 1]?.id !== t.id}
+                        touchReorderStart={touchReorderStart}
+                        dragClass={`${dragInboxTaskId === t.id || touchDragId === t.id ? "dragging" : ""} ${dragOverInboxTaskId === t.id ? "drag-over" : ""}`}
+                        dragHandlers={{
+                          onDragStart: () => setDragInboxTaskId(t.id),
+                          onDragOver: (e) => { e.preventDefault(); setDragOverInboxTaskId(t.id); },
+                          onDrop: (e) => { e.preventDefault(); if (dragInboxTaskId) updateInbox((ts) => moveItem(ts, dragInboxTaskId, t.id)); setDragInboxTaskId(null); setDragOverInboxTaskId(null); },
+                          onDragEnd: () => { setDragInboxTaskId(null); setDragOverInboxTaskId(null); },
+                        }} />
+                    ))}
+
+                    {completedInboxTasks.length > 0 && <li className="pd-tasksep">Completed</li>}
+                    {completedInboxTasks.map((t) => (
+                      <TaskRow key={t.id} task={t} color={INBOX_COLOR} isMobile={isMobile} completed={true}
+                        onToggle={() => toggleTaskDone(t.id)}
+                        onDelete={() => deleteInboxTaskWithUndo(t)}
+                        onTitle={(title) => updateInbox((ts) => ts.map((x) => x.id === t.id ? { ...x, title } : x))}
+                        onDeadline={() => {}} />
+                    ))}
+                  </ul>
+                )}
+                <div className="pd-saved">{savedFlash}</div>
+                <div style={{ height: isMobile ? 24 : 0 }} />
+              </div>
             )}
             {screen === "brain" && (
               <BrainScreen projects={projects} notes={notes} isMobile={isMobile}

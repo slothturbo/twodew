@@ -527,6 +527,11 @@ button{touch-action:manipulation;}
     linear-gradient(currentColor 0 0) 9px 9px/7px 7px no-repeat;
 }
 .pd-navicon-calendar{border:2px solid currentColor; border-radius:4px;}
+.pd-navicon-tasks{border:2px solid currentColor; border-radius:4px; position:relative;}
+.pd-navicon-tasks::after{
+  content:""; position:absolute; left:3px; top:5px; width:4px; height:7px;
+  border-right:2px solid currentColor; border-bottom:2px solid currentColor; transform:rotate(45deg);
+}
 .pd-navicon-brain{border:2px solid currentColor; border-radius:4px; position:relative;}
 .pd-navicon-brain::after{
   content:""; position:absolute; left:3px; right:3px; top:3px; height:0;
@@ -728,6 +733,7 @@ button{touch-action:manipulation;}
 
 /* ---- redesign: Stats screen ---- */
 .pd-stats{flex:1; overflow-y:auto; padding:24px 32px;}
+.pd-tasks-screen{flex:1; overflow-y:auto; padding:24px 32px;}
 .pd-stats-panel{background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg); padding:20px; margin-bottom:18px;}
 .pd-daybar-row{display:flex; align-items:flex-end; gap:12px; height:120px;}
 .pd-daybar-col{flex:1; display:flex; flex-direction:column; align-items:center; gap:10px; height:100%; justify-content:flex-end;}
