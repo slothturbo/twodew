@@ -515,6 +515,7 @@ function AppShell({ userId }) {
   const touchDrag = useRef(null);
   const tickTimer = useRef(null);
   const lastWrittenAtRef = useRef(null);
+  const pendingWriteRef = useRef(false);
   selectedIdRef.current = selectedId;
 
   // Mirror the redesign's root-level state into refs so the debounced persist() below
@@ -584,7 +585,13 @@ function AppShell({ userId }) {
         (payload) => {
           const row = payload.new;
           if (!row || row.key !== STORAGE_KEY) return;
-          if (lastWrittenAtRef.current && row.updated_at === lastWrittenAtRef.current) return; // our own write echoing back
+          // Skip while a local change hasn't reached the DB yet — applying a remote
+          // snapshot here would silently overwrite/lose the pending edit, since the
+          // debounced persist() below would then save from refs we just clobbered.
+          if (pendingWriteRef.current) return;
+          // Skip our own write echoing back (compare numerically — Postgres may
+          // reformat the timestamp string even though it's the same instant).
+          if (lastWrittenAtRef.current && new Date(row.updated_at).getTime() <= new Date(lastWrittenAtRef.current).getTime()) return;
           applyData(row.value);
           setSavedFlash("synced from another device");
           clearTimeout(flashTimer.current);
@@ -598,6 +605,10 @@ function AppShell({ userId }) {
   /* ---- debounced save (whole root blob: projects, inbox, logs, timer, last selected) ---- */
   const persist = useCallback(() => {
     clearTimeout(saveTimer.current);
+    // Marked immediately (not just once the timeout fires) so a realtime event landing
+    // anywhere in the debounce window — before this change has actually reached the DB —
+    // can't overwrite it via applyData() and get silently persisted over on the next save.
+    pendingWriteRef.current = true;
     saveTimer.current = setTimeout(async () => {
       try {
         const blob = JSON.stringify({
@@ -623,6 +634,7 @@ function AppShell({ userId }) {
           flashTimer.current = setTimeout(() => setSavedFlash(""), 1200);
         }
       } catch (e) { setSavedFlash("save failed — will retry on next change"); }
+      finally { pendingWriteRef.current = false; }
     }, 500);
   }, []);
 
