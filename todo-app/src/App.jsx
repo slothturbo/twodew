@@ -584,14 +584,16 @@ function AppShell({ userId }) {
         { event: "*", schema: "public", table: "kv_store", filter: `user_id=eq.${userId}` },
         (payload) => {
           const row = payload.new;
+          console.log("[DEBUG realtime event]", row?.updated_at, "pending=", pendingWriteRef.current, "lastWritten=", lastWrittenAtRef.current, "completionLog=", row?.value?.completionLog);
           if (!row || row.key !== STORAGE_KEY) return;
           // Skip while a local change hasn't reached the DB yet — applying a remote
           // snapshot here would silently overwrite/lose the pending edit, since the
           // debounced persist() below would then save from refs we just clobbered.
-          if (pendingWriteRef.current) return;
+          if (pendingWriteRef.current) { console.log("[DEBUG realtime] skipped: pending write"); return; }
           // Skip our own write echoing back (compare numerically — Postgres may
           // reformat the timestamp string even though it's the same instant).
-          if (lastWrittenAtRef.current && new Date(row.updated_at).getTime() <= new Date(lastWrittenAtRef.current).getTime()) return;
+          if (lastWrittenAtRef.current && new Date(row.updated_at).getTime() <= new Date(lastWrittenAtRef.current).getTime()) { console.log("[DEBUG realtime] skipped: not newer than last write"); return; }
+          console.log("[DEBUG realtime] APPLYING remote data");
           applyData(row.value);
           setSavedFlash("synced from another device");
           clearTimeout(flashTimer.current);
@@ -665,8 +667,10 @@ function AppShell({ userId }) {
 
   // Durable per-day counters — survive task deletion, the only source of truth for streak/heatmap/week-bar.
   const bumpCompletionLog = useCallback((date, delta) => {
+    console.log("[DEBUG bumpCompletionLog] called with", date, delta);
     setCompletionLog((prev) => {
       const next = { ...prev, [date]: Math.max(0, (prev[date] || 0) + delta) };
+      console.log("[DEBUG bumpCompletionLog] prev=", prev[date], "-> next=", next[date]);
       completionLogRef.current = next;
       persist();
       return next;
@@ -708,6 +712,7 @@ function AppShell({ userId }) {
       logDelta = { day: t.completedAt ? localDateISO(t.completedAt) : today, delta: -1 };
       return { ...t, done: false, completedAt: null };
     });
+    console.log("[DEBUG toggleTaskDone]", taskId, "logDelta=", logDelta);
     if (logDelta) bumpCompletionLog(logDelta.day, logDelta.delta);
   }, [locateAndPatchTask, bumpCompletionLog]);
 
