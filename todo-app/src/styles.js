@@ -218,6 +218,10 @@ button{touch-action:manipulation;}
   transition:background .15s ease,border-color .15s ease; padding:0;
 }
 .pd-check svg{opacity:0; transition:opacity .15s ease;}
+/* Default done state — accent fill + dark check. An inline style (project color)
+   overrides the background where a color is supplied; screens without a color
+   (Today) fall back to this so the check is always visible, not a dark-on-dark blank. */
+.pd-check.done{background:var(--accent); border-color:var(--accent);}
 .pd-check.done svg{opacity:1;}
 .pd-task-title{flex:1; min-width:120px; font-size:15px; border:none; background:transparent; color:var(--ink); font-family:'Plus Jakarta Sans',sans-serif; padding:4px 0;}
 .pd-task-title:focus{outline:none;}
