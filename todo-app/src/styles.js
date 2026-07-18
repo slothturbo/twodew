@@ -64,11 +64,11 @@ button{touch-action:manipulation;}
 .pd-body{flex:1; display:flex; min-height:0; position:relative; overflow:hidden;}
 .pd-left{
   width:380px; min-width:320px; border-right:1px solid var(--line); overflow-y:auto; padding:16px;
-  -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
+  overscroll-behavior:contain;
 }
 .pd-right{
   flex:1; overflow-y:auto; padding:24px; background:var(--card);
-  -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
+  overscroll-behavior:contain;
 }
 
 /* ---- search ---- */
@@ -320,7 +320,7 @@ button{touch-action:manipulation;}
   color:var(--ink); cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center;
 }
 .pd-panel-actions button:hover{border-color:var(--accent); color:var(--accent);}
-.pd-panel-body{flex:1; overflow-y:auto; padding:16px 18px; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;}
+.pd-panel-body{flex:1; overflow-y:auto; padding:16px 18px; overscroll-behavior:contain;}
 .pd-panel-edit{
   font-size:15px; font-family:'Plus Jakarta Sans',sans-serif; color:var(--ink); line-height:1.65; min-height:100%;
 }
@@ -613,7 +613,7 @@ button{touch-action:manipulation;}
 
 /* ---- redesign: Today screen ---- */
 .pd-today{
-  flex:1; overflow-y:auto; padding:24px 32px; -webkit-overflow-scrolling:touch; position:relative;
+  flex:1; overflow-y:auto; padding:24px 32px; position:relative;
   background:
     radial-gradient(circle at 15% 0%, rgba(255,90,46,0.10), transparent 45%),
     radial-gradient(circle at 90% 12%, rgba(125,216,198,0.08), transparent 40%);
@@ -720,7 +720,7 @@ button{touch-action:manipulation;}
 }
 
 /* ---- redesign: Stats screen ---- */
-.pd-stats{flex:1; overflow-y:auto; padding:24px 32px; -webkit-overflow-scrolling:touch;}
+.pd-stats{flex:1; overflow-y:auto; padding:24px 32px;}
 .pd-stats-panel{background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg); padding:20px; margin-bottom:18px;}
 .pd-daybar-row{display:flex; align-items:flex-end; gap:12px; height:120px;}
 .pd-daybar-col{flex:1; display:flex; flex-direction:column; align-items:center; gap:10px; height:100%; justify-content:flex-end;}
@@ -736,7 +736,7 @@ button{touch-action:manipulation;}
 .pd-task-edit-row{display:flex; align-items:center; gap:10px;}
 
 /* ---- redesign: Notes screen — all notes in one wall, drop images anywhere ---- */
-.pd-notes{flex:1; overflow-y:auto; padding:24px 32px; -webkit-overflow-scrolling:touch;}
+.pd-notes{flex:1; overflow-y:auto; padding:24px 32px;}
 .pd-notes.dragover{outline:2px dashed var(--accent); outline-offset:-10px; border-radius:var(--r-lg);}
 .pd-notes-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:14px; align-items:start;}
 .pd-notes-cell{min-width:0;}
