@@ -57,7 +57,7 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
       </div>
       {isMobile ? (
         <div className="pd-cal-agenda">
-          {cells.filter((c) => c.inMonth && c.items.length > 0).map((day) => (
+          {cells.filter((c) => c.inMonth && c.items.length > 0 && c.iso >= todayIso).map((day) => (
             <div key={day.iso} className={`pd-cal-agenda-day ${day.iso === todayIso ? "today" : ""}`}>
               <div className="pd-cal-agenda-date">
                 <div className="pd-cal-agenda-daynum">{day.date.getDate()}</div>
@@ -78,8 +78,8 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
               </div>
             </div>
           ))}
-          {cells.every((c) => !c.inMonth || c.items.length === 0) && (
-            <p className="pd-empty">No deadlines this month.</p>
+          {cells.every((c) => !c.inMonth || c.items.length === 0 || c.iso < todayIso) && (
+            <p className="pd-empty">Nothing upcoming this month.</p>
           )}
         </div>
       ) : (

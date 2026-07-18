@@ -29,7 +29,7 @@ const NAV_ITEMS = [
   { key: "brain", label: "Brain", icon: "brain" },
   { key: "projects", label: "Projects", icon: "projects" },
   { key: "calendar", label: "Calendar", icon: "calendar" },
-  { key: "stats", label: "Stats", icon: "stats" },
+  { key: "stats", label: "Insights", icon: "stats" },
 ];
 const SCREEN_TITLES = { today: "Today", brain: "Brain", projects: "Projects", calendar: "Calendar", stats: "Insights" };
 // Shared defaults for both project.tasks[] and the project-less inbox[] — additive only,
@@ -1062,7 +1062,7 @@ function AppShell() {
               </>
             ) : screen === "brain" ? (
               <>
-                <div className="pd-title">{SCREEN_TITLES[screen]}</div>
+                <div className="pd-title">{SCREEN_TITLES[screen]}<span>.</span></div>
                 <div className="pd-topbar-quickadd-wrap">
                   <input className="pd-topbar-quickadd" placeholder="Capture a thought and press Enter…"
                     value={brainInput} onChange={(e) => setBrainInput(e.target.value)}
@@ -1072,7 +1072,7 @@ function AppShell() {
               </>
             ) : (
               <>
-                <div className="pd-title">{screen === "today" ? greeting : SCREEN_TITLES[screen]}</div>
+                <div className="pd-title">{screen === "today" ? greeting : SCREEN_TITLES[screen]}<span>.</span></div>
                 <div className="pd-topbar-quickadd-wrap">
                   <input className="pd-topbar-quickadd" placeholder='Add a task…  try "call mom tomorrow 5pm"'
                     value={inboxInput} onChange={(e) => setInboxInput(e.target.value)}

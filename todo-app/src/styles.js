@@ -689,9 +689,13 @@ button{touch-action:manipulation;}
   background:var(--card); border:1px solid var(--line); border-radius:var(--r-md); padding:6px;
   display:flex; flex-direction:column; gap:4px; min-height:0; min-width:0; overflow:hidden;
 }
-.pd-cal-cell.today{border-color:var(--accent);}
+.pd-cal-cell.today{border-color:var(--accent); background:rgba(255,90,31,0.08);}
 .pd-cal-cell.muted{opacity:.45;}
-.pd-cal-cell-date{font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:12px; flex-shrink:0; padding:2px 2px 0;}
+.pd-cal-cell-date{
+  font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:12px; flex-shrink:0;
+  width:20px; height:20px; display:flex; align-items:center; justify-content:center; margin:2px 2px 0 0;
+}
+.pd-cal-cell.today .pd-cal-cell-date{background:var(--accent); color:var(--accent-ink); border-radius:50%;}
 .pd-cal-cell-items{flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:3px;}
 .pd-cal-chip{
   all:unset; box-sizing:border-box; display:block; width:100%; cursor:pointer; border-radius:5px; padding:3px 6px; font-size:10.5px;
@@ -701,9 +705,12 @@ button{touch-action:manipulation;}
 
 .pd-cal-agenda{flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:2px;}
 .pd-cal-agenda-day{display:flex; gap:14px; padding:14px 2px; border-bottom:1px solid var(--line);}
-.pd-cal-agenda-day.today .pd-cal-agenda-daynum{color:var(--accent);}
 .pd-cal-agenda-date{flex-shrink:0; width:36px; text-align:center;}
-.pd-cal-agenda-daynum{font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:20px; line-height:1;}
+.pd-cal-agenda-daynum{
+  font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:20px; line-height:1;
+  width:32px; height:32px; display:flex; align-items:center; justify-content:center; margin:0 auto; border-radius:50%;
+}
+.pd-cal-agenda-day.today .pd-cal-agenda-daynum{background:var(--accent); color:var(--accent-ink);}
 .pd-cal-agenda-dow{
   font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.06em; text-transform:uppercase;
   color:var(--muted); margin-top:2px;
