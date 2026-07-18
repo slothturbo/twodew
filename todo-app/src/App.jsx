@@ -1369,17 +1369,17 @@ const gateCss = `
   background:#050505; color:#F5F6F1; font-family:'Plus Jakarta Sans',system-ui,sans-serif; padding:24px;
   padding-top:max(24px, env(safe-area-inset-top)); -webkit-tap-highlight-color:transparent;
 }
-.pd-gate-card{width:100%; max-width:340px; text-align:center;}
-.pd-gate-title{font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:22px; margin-bottom:6px;}
+.pd-gate-card{width:100%; max-width:340px; text-align:center; box-sizing:border-box;}
+.pd-gate-title{font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:36px; letter-spacing:-0.02em; margin-bottom:8px;}
 .pd-gate-title span{color:#FF5A2E;}
 .pd-gate-sub{color:#8B8E93; font-size:13px; margin-bottom:22px;}
 .pd-gate-input{
-  width:100%; padding:11px 14px; font-size:16px; border:1px solid #26282C; border-radius:14px;
+  box-sizing:border-box; width:100%; padding:11px 14px; font-size:16px; border:1px solid #26282C; border-radius:14px;
   background:#1D1F22; color:#F5F6F1; margin-bottom:10px;
 }
 .pd-gate-input:focus{outline:none; border-color:#FF5A2E;}
 .pd-gate-btn{
-  width:100%; border:none; background:#FF5A2E; color:#0A0A0A; border-radius:14px; padding:12px 14px;
+  box-sizing:border-box; width:100%; border:none; background:#FF5A2E; color:#0A0A0A; border-radius:14px; padding:12px 14px;
   font-size:14px; font-weight:700; cursor:pointer;
 }
 .pd-gate-btn:active{transform:scale(.98);}
@@ -1424,7 +1424,7 @@ function LoginGate() {
     <div className="pd-gate">
       <style>{gateCss}</style>
       <div className="pd-gate-card">
-        <div className="pd-gate-title">Projects<span>.</span></div>
+        <div className="pd-gate-title">two::dew<span>.</span></div>
         <div className="pd-gate-sub">
           {sent
             ? "Enter the code from your email — right here in this window."
