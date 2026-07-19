@@ -439,6 +439,14 @@ button{touch-action:manipulation;}
 }
 @keyframes pd-pulse{0%,100%{opacity:.5;} 50%{opacity:1;}}
 
+/* ---- boot splash (pre-auth-data loading) ---- */
+.pd-boot{align-items:center; justify-content:center;}
+.pd-boot-title{
+  font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:38px;
+  letter-spacing:-0.03em; line-height:1; animation:pd-pulse 1.4s ease-in-out infinite;
+}
+.pd-boot-title span{color:var(--accent);}
+
 /* ---- toast (undo) ---- */
 .pd-toast{
   position:fixed; left:50%; transform:translateX(-50%); z-index:300;
