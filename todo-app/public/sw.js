@@ -1,6 +1,6 @@
 // App-shell cache: makes the installed app open instantly, even on bad signal.
 // Data still comes from Supabase live — this only caches the interface itself.
-const CACHE = "twodew-shell-v1";
+const CACHE = "twodew-shell-v2";
 const SHELL = ["/", "/index.html", "/manifest.json", "/icon.png"];
 
 self.addEventListener("install", (e) => {
