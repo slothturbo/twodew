@@ -695,20 +695,23 @@ function AppShell({ userId }) {
   }, [update, updateInbox]);
 
   const toggleTaskDone = useCallback((taskId) => {
-    // Compute the log delta outside the state-updater callback — React (StrictMode in
-    // particular) may invoke that callback more than once per call, and bumpCompletionLog
-    // is a side effect that must only run once per real toggle.
+    // Read the task's *current* state directly from the refs — not from inside the
+    // locateAndPatchTask callback below. That callback runs as a React state-updater
+    // function, which isn't guaranteed to execute synchronously; reading logDelta right
+    // after calling locateAndPatchTask was landing before the updater had actually run,
+    // so bumpCompletionLog fired with a stale/null delta and the Insights counters never
+    // moved even though the task's own done flag updated fine on the next render.
+    const current = inboxRef.current.find((t) => t.id === taskId)
+      || projectsRef.current.flatMap((p) => p.tasks).find((t) => t.id === taskId);
+    if (!current) return;
     const today = todayISO();
-    let logDelta = null;
-    locateAndPatchTask(taskId, (t) => {
-      if (!t.done) {
-        logDelta = { day: today, delta: 1 };
-        return { ...t, done: true, completedAt: Date.now() };
-      }
-      logDelta = { day: t.completedAt ? localDateISO(t.completedAt) : today, delta: -1 };
-      return { ...t, done: false, completedAt: null };
-    });
-    if (logDelta) bumpCompletionLog(logDelta.day, logDelta.delta);
+    const logDelta = !current.done
+      ? { day: today, delta: 1 }
+      : { day: current.completedAt ? localDateISO(current.completedAt) : today, delta: -1 };
+    locateAndPatchTask(taskId, (t) => (
+      !t.done ? { ...t, done: true, completedAt: Date.now() } : { ...t, done: false, completedAt: null }
+    ));
+    bumpCompletionLog(logDelta.day, logDelta.delta);
   }, [locateAndPatchTask, bumpCompletionLog]);
 
   const cycleTaskPriority = useCallback((taskId) => {
@@ -838,7 +841,9 @@ function AppShell({ userId }) {
     );
   }, [sorted, query]);
   const selected = projects.find((p) => p.id === selectedId) || null;
-  const allTasks = projects.flatMap((p) => p.tasks);
+  // Includes inbox (standalone) tasks — not just project tasks — so "overall" reflects
+  // everything checked off, including tasks added straight from the Today homepage.
+  const allTasks = [...projects.flatMap((p) => p.tasks), ...inbox];
   const overallPct = allTasks.length ? Math.round((allTasks.filter((t) => t.done).length / allTasks.length) * 100) : 0;
 
   /* ---- actions ---- */
