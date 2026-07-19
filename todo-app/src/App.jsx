@@ -1081,7 +1081,7 @@ function AppShell({ userId }) {
   if (!loaded) {
     return (
       <div className="pd-app"><style>{css}</style>
-        <div className="pd-topbar"><div className="pd-title">Projects<span>.</span></div></div>
+        <div className="pd-topbar"><div className="pd-title">two::dew<span>.</span></div></div>
         <div className="pd-skel">
           <div className="pd-skel-row" /><div className="pd-skel-row" /><div className="pd-skel-row" style={{ animationDelay: ".15s" }} />
         </div>
