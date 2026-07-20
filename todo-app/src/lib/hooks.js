@@ -61,7 +61,7 @@ function getGreetingForHour(hour) {
   if (hour >= 6 && hour < 14) return "Good morning";
   if (hour >= 13 && hour < 18) return "Good afternoon";
   if (hour >= 19 && hour < 22) return "Welcome back";
-  return "Rest well";
+  return "Hello, night owl";
 }
 
 // Local development monitor hook - monitors localhost build performance
