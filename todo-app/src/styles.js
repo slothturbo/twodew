@@ -1,5 +1,5 @@
 export const css = `
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+/* Fonts are linked from index.html <head>, not @import-ed here — see the comment there. */
 
 :root{
   --bg:#050505; --card:#141416; --raised:#1D1F22; --ink:#F5F6F1; --muted:#8B8E93;

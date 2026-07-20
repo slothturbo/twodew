@@ -12,6 +12,12 @@
     <meta name="apple-mobile-web-app-title" content="two::dew" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Loaded here rather than via @import inside the JS-injected stylesheet: as an
+         @import the browser couldn't even discover the fonts until the whole JS bundle
+         had downloaded, parsed and mounted React. Here they download in parallel with
+         the bundle instead, which is the difference between one round-trip and three
+         on a slow phone. -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" />
     <link rel="apple-touch-icon" href="/icon.png" />
     <link rel="icon" href="/icon.png" />
     <link rel="manifest" href="/manifest.json" />
