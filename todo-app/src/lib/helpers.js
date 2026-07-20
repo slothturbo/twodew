@@ -170,8 +170,8 @@ export function computeUpcoming(projects, inbox, limit = 6) {
 export function computeTodayView(projects, inbox) {
   const today = todayISO();
   const all = [
-    ...inbox.map((t) => ({ ...t, projectName: null, projectColor: null })),
-    ...projects.flatMap((p) => p.tasks.map((t) => ({ ...t, projectName: p.name, projectColor: colorOf(p) }))),
+    ...inbox.map((t) => ({ ...t, projectId: null, projectName: null, projectColor: null })),
+    ...projects.flatMap((p) => p.tasks.map((t) => ({ ...t, projectId: p.id, projectName: p.name, projectColor: colorOf(p) }))),
   ];
   const relevant = all.filter((t) => {
     if (t.recurring) return true;
@@ -189,4 +189,20 @@ export function computeTodayView(projects, inbox) {
     }
     return a.createdAt - b.createdAt;
   });
+}
+
+// Buckets computeTodayView's flat list into one group per project (+ an Inbox
+// group for project-less tasks), preserving each task's relative order —
+// group order falls out naturally from whichever task in a group is most
+// urgent, since the input list is already priority/deadline sorted.
+export function groupTodayByProject(items) {
+  const groups = new Map();
+  for (const t of items) {
+    const key = t.projectId || "inbox";
+    if (!groups.has(key)) {
+      groups.set(key, { key, name: t.projectName || "Inbox", color: t.projectColor, tasks: [] });
+    }
+    groups.get(key).tasks.push(t);
+  }
+  return [...groups.values()];
 }

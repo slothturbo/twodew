@@ -8,7 +8,7 @@ export function Sidebar({ screen, navItems, onNavigate, projects, onOpenProject,
   return (
     <nav className={`pd-sidebar ${collapsed ? "collapsed" : ""}`}>
       <div className="pd-sidebar-head">
-        <div className="pd-sidebar-logo" />
+        <img src="/icon.png" alt="" className="pd-sidebar-logo" />
         {!collapsed && (
           <button type="button" className="pd-sidebar-search" onClick={onOpenPalette}>
             <span className="pd-navicon pd-navicon-search" />

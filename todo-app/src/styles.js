@@ -568,7 +568,7 @@ button{touch-action:manipulation;}
 }
 .pd-sidebar.collapsed{width:68px; padding:18px 10px; align-items:center;}
 .pd-sidebar-head{display:flex; flex-direction:column; gap:14px;}
-.pd-sidebar-logo{width:30px; height:30px; border-radius:9px; background:var(--accent); flex-shrink:0;}
+.pd-sidebar-logo{width:30px; height:30px; border-radius:9px; flex-shrink:0; object-fit:cover;}
 .pd-sidebar-search{
   all:unset; box-sizing:border-box; display:flex; align-items:center; gap:8px; cursor:pointer;
   padding:8px 10px; border-radius:var(--r-md); border:1px solid var(--line); color:var(--muted);
@@ -631,17 +631,9 @@ button{touch-action:manipulation;}
     radial-gradient(circle at 15% 0%, rgba(255,90,46,0.10), transparent 45%),
     radial-gradient(circle at 90% 12%, rgba(125,216,198,0.08), transparent 40%);
 }
-/* Readable measure: full-width page, centered content column (Things-style) */
-.pd-today-col{width:100%; max-width:760px; margin:0 auto;}
-.pd-stat-strip{
-  display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
-  font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted); margin-bottom:26px;
-}
-.pd-stat-strip b{font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:18px; letter-spacing:-0.01em;}
-.pd-stat-strip b.gold{color:var(--accent);}
-.pd-stat-strip b.sage{color:var(--stat-sage);}
-.pd-stat-strip b.coral{color:var(--priority-high);}
-.pd-strip-dot{opacity:.4;}
+/* Wide measure: this screen now fills the window with a card grid, so it doesn't
+   need the narrow reading-column cap the single-list layout used to. */
+.pd-today-col{width:100%; max-width:1500px; margin:0 auto;}
 .pd-stat-row{display:grid; grid-template-columns:repeat(auto-fit, minmax(170px,1fr)); gap:12px; margin-bottom:28px;}
 .pd-stat-tile{
   border-radius:var(--r-lg); padding:20px 22px; border:none;
@@ -652,8 +644,25 @@ button{touch-action:manipulation;}
 .pd-stat-tile.orange{background:var(--accent); color:var(--accent-ink);}
 .pd-stat-tile.olive{background:var(--stat-sage); color:#0A0A0A;}
 .pd-stat-tile.lilac{background:var(--stat-lilac); color:#0A0A0A;}
+.pd-stat-tile.coral{background:var(--priority-high); color:#0A0A0A;}
 .pd-stat-label{font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:14px; letter-spacing:-0.01em; opacity:.7;}
 .pd-stat-value{font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:46px; letter-spacing:-0.03em; line-height:1;}
+
+/* Today's tasks grouped one card per project (+ Inbox), filling the wide screen
+   instead of a single narrow list. */
+.pd-today-groups{display:grid; grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); gap:16px; align-items:start;}
+.pd-today-card{
+  background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg);
+  padding:14px 16px 4px; animation:pd-in .25s ease;
+}
+.pd-today-card-head{display:flex; align-items:center; gap:8px; margin-bottom:2px;}
+.pd-today-card-dot{width:8px; height:8px; border-radius:50%; flex-shrink:0;}
+.pd-today-card-name{
+  flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:14px;
+}
+.pd-today-card-count{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); flex-shrink:0;}
+.pd-today-card .pd-today-row:last-child{border-bottom:none;}
 
 .pd-today-list{list-style:none;}
 .pd-today-row{display:flex; align-items:flex-start; gap:10px; padding:12px 4px; border-bottom:1px solid var(--line);}

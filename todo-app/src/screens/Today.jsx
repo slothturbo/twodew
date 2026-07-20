@@ -2,7 +2,7 @@ import { useRef, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   todayISO, dueLabel, PRIORITY_COLOR, liveTaskSeconds, formatDuration, currentStreak,
-  computeTodayView, computeUpcoming, taskTimeRangeLabel,
+  computeTodayView, computeUpcoming, groupTodayByProject, taskTimeRangeLabel,
 } from "../lib/helpers";
 
 const LONG_PRESS_MS = 450;
@@ -65,7 +65,6 @@ function TodayTaskRow({ task, running, liveSeconds, onToggle, onCyclePriority, o
         <div className={`pd-today-title ${task.done ? "done" : ""}`}>{task.title}</div>
         <div className="pd-today-meta">
           <span>{taskTimeRangeLabel(task) || "Today"}</span>
-          {task.projectName && <span>· {task.projectName}</span>}
           {task.recurring && <span title="Repeats daily">↻</span>}
           {subtaskLabel && <span>{subtaskLabel}</span>}
         </div>
@@ -90,6 +89,7 @@ export function TodayScreen({
 }) {
   const today = todayISO();
   const items = useMemo(() => computeTodayView(projects, inbox), [projects, inbox]);
+  const groups = useMemo(() => groupTodayByProject(items), [items]);
   const openCount = items.filter((t) => !t.done).length;
   const completedToday = completionLog[today] || 0;
   const streak = useMemo(() => currentStreak(completionLog), [completionLog, tick]);
@@ -101,31 +101,51 @@ export function TodayScreen({
   return (
     <div className="pd-today">
       <div className="pd-today-col">
-        <div className="pd-stat-strip">
-          <span><b className="gold">{openCount}</b> on deck</span>
-          <span className="pd-strip-dot">·</span>
-          <span><b className="gold">{completedToday}</b> done today</span>
-          <span className="pd-strip-dot">·</span>
-          <span><b className="sage">{streak}d</b> streak</span>
-          <span className="pd-strip-dot">·</span>
-          <span><b className="coral">{formatDuration(focusSeconds, false) || "0m"}</b> focused</span>
+        <div className="pd-stat-row">
+          <div className="pd-stat-tile orange">
+            <div className="pd-stat-label">On deck</div>
+            <div className="pd-stat-value">{openCount}</div>
+          </div>
+          <div className="pd-stat-tile olive">
+            <div className="pd-stat-label">Done today</div>
+            <div className="pd-stat-value">{completedToday}</div>
+          </div>
+          <div className="pd-stat-tile lilac">
+            <div className="pd-stat-label">Streak</div>
+            <div className="pd-stat-value">{streak}d</div>
+          </div>
+          <div className="pd-stat-tile coral">
+            <div className="pd-stat-label">Focused</div>
+            <div className="pd-stat-value">{formatDuration(focusSeconds, false) || "0m"}</div>
+          </div>
         </div>
 
         <div className="pd-section-label">Today</div>
         {items.length === 0 ? (
           <p className="pd-empty">Nothing on deck. Add a task above, or check back tomorrow.</p>
         ) : (
-          <ul className="pd-today-list">
-            {items.map((t) => (
-              <TodayTaskRow key={t.id} task={t}
-                running={runningTaskId === t.id}
-                liveSeconds={liveTaskSeconds(t, runningTaskId, runStart)}
-                onToggle={() => onToggle(t.id)}
-                onCyclePriority={() => onCyclePriority(t.id)}
-                onToggleTrack={() => onToggleTrack(t.id)}
-                onOpenMenu={(task, pos) => setMenu({ task, x: pos.x, y: pos.y })} />
+          <div className="pd-today-groups">
+            {groups.map((g) => (
+              <div key={g.key} className="pd-today-card">
+                <div className="pd-today-card-head">
+                  <span className="pd-today-card-dot" style={{ background: g.color ? g.color.fg : "var(--muted)" }} />
+                  <span className="pd-today-card-name">{g.name}</span>
+                  <span className="pd-today-card-count">{g.tasks.filter((t) => t.done).length}/{g.tasks.length}</span>
+                </div>
+                <ul className="pd-today-list">
+                  {g.tasks.map((t) => (
+                    <TodayTaskRow key={t.id} task={t}
+                      running={runningTaskId === t.id}
+                      liveSeconds={liveTaskSeconds(t, runningTaskId, runStart)}
+                      onToggle={() => onToggle(t.id)}
+                      onCyclePriority={() => onCyclePriority(t.id)}
+                      onToggleTrack={() => onToggleTrack(t.id)}
+                      onOpenMenu={(task, pos) => setMenu({ task, x: pos.x, y: pos.y })} />
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
 
         {upcoming.length > 0 && (
