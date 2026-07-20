@@ -5,7 +5,7 @@ import { supabase } from "./supabaseClient";
 import { css } from "./styles";
 import { textToHtml, htmlToPlain, imageFileToDataURL } from "./lib/html";
 import { useIsMobile, useKeyboardInset, useGreeting } from "./lib/hooks";
-import { Ring } from "./components/Ring";
+import { Ring, ProgressFill } from "./components/Ring";
 import { Bubble } from "./components/Bubble";
 import { CommandPalette } from "./components/CommandPalette";
 import { Sidebar } from "./components/Sidebar";
@@ -766,25 +766,30 @@ function AppShell({ userId }) {
     setAdding(true);
   }, []);
 
-  // Single-task editor (Calendar chip click on a project-less task — it has no project
-  // page to land on, so it gets a small standalone editor instead).
-  const editingTask = inbox.find((t) => t.id === editingTaskId) || null;
+  // Single-task editor (Calendar chip click on a project-less task, or the Today screen's
+  // long-press "Edit" — a task can live in the inbox or any project, so lookups/patches go
+  // through locateAndPatchTask rather than assuming inbox-only).
+  const editingTask = inbox.find((t) => t.id === editingTaskId)
+    || projects.flatMap((p) => p.tasks).find((t) => t.id === editingTaskId)
+    || null;
   const editTaskTitle = useCallback((title) => {
-    updateInbox((ts) => ts.map((t) => (t.id === editingTaskId ? { ...t, title } : t)));
-  }, [updateInbox, editingTaskId]);
+    locateAndPatchTask(editingTaskId, (t) => ({ ...t, title }));
+  }, [locateAndPatchTask, editingTaskId]);
   const editTaskDeadline = useCallback((iso) => {
-    updateInbox((ts) => ts.map((t) => (t.id === editingTaskId ? { ...t, deadline: iso } : t)));
-  }, [updateInbox, editingTaskId]);
+    locateAndPatchTask(editingTaskId, (t) => ({ ...t, deadline: iso }));
+  }, [locateAndPatchTask, editingTaskId]);
   const editTaskStartTime = useCallback((v) => {
-    updateInbox((ts) => ts.map((t) => (t.id === editingTaskId ? { ...t, startTime: v } : t)));
-  }, [updateInbox, editingTaskId]);
+    locateAndPatchTask(editingTaskId, (t) => ({ ...t, startTime: v }));
+  }, [locateAndPatchTask, editingTaskId]);
   const editTaskEndTime = useCallback((v) => {
-    updateInbox((ts) => ts.map((t) => (t.id === editingTaskId ? { ...t, endTime: v } : t)));
-  }, [updateInbox, editingTaskId]);
+    locateAndPatchTask(editingTaskId, (t) => ({ ...t, endTime: v }));
+  }, [locateAndPatchTask, editingTaskId]);
   const deleteEditingTask = useCallback(() => {
-    updateInbox((ts) => ts.filter((t) => t.id !== editingTaskId));
+    const task = inbox.find((t) => t.id === editingTaskId)
+      || projects.flatMap((p) => p.tasks).find((t) => t.id === editingTaskId);
+    if (task) deleteAnyTaskWithUndo(task);
     setEditingTaskId(null);
-  }, [updateInbox, editingTaskId]);
+  }, [inbox, projects, editingTaskId]);
 
   // Daily reset for recurring tasks — flips done back to false so they reappear tomorrow.
   // Never touches completionLog: that day's completion was already recorded when it happened.
@@ -893,6 +898,23 @@ function AppShell({ userId }) {
       const next = [...ts]; next.splice(Math.min(idx, next.length), 0, task);
       return next;
     }));
+  };
+  // Generalized delete for a task that could live in the inbox or any project — needed by
+  // the Today screen, which aggregates both and doesn't have a "selected" project in scope.
+  const deleteAnyTaskWithUndo = (task) => {
+    if (inboxRef.current.some((t) => t.id === task.id)) {
+      deleteInboxTaskWithUndo(task);
+      return;
+    }
+    const proj = projectsRef.current.find((p) => p.tasks.some((t) => t.id === task.id));
+    if (!proj) return;
+    const idx = proj.tasks.findIndex((t) => t.id === task.id);
+    update((prev) => prev.map((p) => (p.id === proj.id ? { ...p, tasks: p.tasks.filter((t) => t.id !== task.id) } : p)));
+    showUndo("Task deleted", () => update((prev) => prev.map((p) => {
+      if (p.id !== proj.id) return p;
+      const ts = [...p.tasks]; ts.splice(Math.min(idx, ts.length), 0, task);
+      return { ...p, tasks: ts };
+    })));
   };
   const deleteNoteWithUndo = (note) => {
     const projId = selected.id;
@@ -1119,7 +1141,7 @@ function AppShell({ userId }) {
               <>
                 <div className="pd-title">Projects<span>.</span></div>
                 <div className="pd-overall">
-                  <div className="pd-overall-bar"><div className="pd-overall-fill" style={{ width: `${overallPct}%` }} /></div>
+                  <div className="pd-overall-bar"><ProgressFill className="pd-overall-fill" pct={overallPct} /></div>
                   <span className="pd-overall-label">
                     {allTasks.length ? `${overallPct}% overall · ${projects.length} project${projects.length !== 1 ? "s" : ""}` : "no tasks yet"}
                   </span>
@@ -1152,7 +1174,8 @@ function AppShell({ userId }) {
             {screen === "today" && (
               <TodayScreen projects={projects} inbox={inbox} runningTaskId={runningTaskId} runStart={runStart} tick={tick}
                 completionLog={completionLog} focusLog={focusLog}
-                onToggle={toggleTaskDone} onCyclePriority={cycleTaskPriority} onToggleTrack={toggleTrack} />
+                onToggle={toggleTaskDone} onCyclePriority={cycleTaskPriority} onToggleTrack={toggleTrack}
+                onOpenProject={openProject} onOpenTask={(t) => setEditingTaskId(t.id)} onDeleteTask={deleteAnyTaskWithUndo} />
             )}
             {screen === "tasks" && (
               <div className="pd-tasks-screen">
@@ -1337,7 +1360,7 @@ function AppShell({ userId }) {
                 {selPct === null ? "not started" : `${doneCount}/${selected.tasks.length} tasks · ${selPct}%`}
                 {startedLabel(selected.startDate) && <> · {startedLabel(selected.startDate)}</>}
               </div>
-              <div className="pd-progressbar"><div className="pd-progressfill" style={{ width: `${selPct ?? 0}%`, background: selColor.fg }} /></div>
+              <div className="pd-progressbar"><ProgressFill className="pd-progressfill" pct={selPct ?? 0} style={{ background: selColor.fg }} /></div>
 
               <div className="pd-inputrow pd-quickadd-row">
                 <input ref={quickAddRef} className="pd-quickadd" style={{ marginTop: 0 }} enterKeyHint="send"

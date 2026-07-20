@@ -671,9 +671,25 @@ button{touch-action:manipulation;}
 }
 .pd-track-pill.running{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
 
+/* Long-press / right-click menu for a Today task row (see Today.jsx TaskMenu) */
+.pd-task-menu-scrim{position:fixed; inset:0; z-index:60; background:transparent;}
+.pd-task-menu{
+  position:fixed; z-index:61; min-width:140px; background:var(--raised); border:1px solid var(--line);
+  border-radius:var(--r-md); box-shadow:var(--shadow-lg); padding:6px; display:flex; flex-direction:column;
+  gap:2px; animation:pd-in .12s ease;
+}
+.pd-task-menu button{
+  all:unset; box-sizing:border-box; width:100%; padding:9px 12px; border-radius:var(--r-sm);
+  font-size:13.5px; font-family:'Plus Jakarta Sans',sans-serif; color:var(--ink); cursor:pointer;
+}
+.pd-task-menu button:hover{background:var(--card);}
+.pd-task-menu button.danger{color:var(--danger);}
+
 /* ---- redesign: Today — Upcoming list ---- */
 .pd-upcoming-list{list-style:none;}
-.pd-upcoming-row{display:flex; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid var(--line);}
+.pd-upcoming-row{display:flex; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid var(--line); cursor:pointer;}
+.pd-upcoming-row:hover{background:var(--raised);}
+.pd-check-sm{width:18px; height:18px; border-radius:6px;}
 .pd-upcoming-info{flex:1; min-width:0;}
 .pd-upcoming-title{font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .pd-upcoming-meta{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); margin-top:2px;}
@@ -802,5 +818,18 @@ button{touch-action:manipulation;}
   .pd-stat-row{grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:16px;}
   .pd-stat-tile{padding:10px 8px; gap:8px;}
   .pd-stat-label{font-size:12px;}
+
+  /* Projects detail header — collapse to the smallest footprint that's still editable,
+     so a task is visible without scrolling past name/client/location/phase/progress. */
+  .pd-right{padding:14px 16px;}
+  .pd-detail-head{gap:6px;}
+  .pd-proj-name{padding:2px 0;}
+  .pd-meta-grid{display:grid; grid-template-columns:1fr 1fr; gap:2px 8px; margin-top:6px; align-items:stretch;}
+  .pd-field{gap:0;}
+  .pd-field label{font-size:9px;}
+  .pd-field input[type=text]{font-size:12px !important; padding:2px 4px; min-width:0;}
+  .pd-overall-label{margin-top:8px !important; font-size:11px;}
+  .pd-progressbar{margin-top:6px; height:5px;}
+  .pd-danger-btn{padding:5px 9px; font-size:11px;}
 }
 `;

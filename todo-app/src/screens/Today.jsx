@@ -1,15 +1,59 @@
-import { useMemo } from "react";
+import { useRef, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   todayISO, dueLabel, PRIORITY_COLOR, liveTaskSeconds, formatDuration, currentStreak,
   computeTodayView, computeUpcoming, taskTimeRangeLabel,
 } from "../lib/helpers";
 
-function TodayTaskRow({ task, running, liveSeconds, onToggle, onCyclePriority, onToggleTrack }) {
+const LONG_PRESS_MS = 450;
+
+// Small Edit/Delete popup for a long-pressed (or right-clicked) task row.
+// Portaled to <body> since this screen could in principle sit under a
+// backdrop-filter ancestor, which breaks position:fixed coordinate math.
+function TaskMenu({ x, y, onEdit, onDelete, onClose }) {
+  const left = Math.min(x, window.innerWidth - 160);
+  const top = Math.min(y, window.innerHeight - 110);
+  return createPortal(
+    <>
+      <div className="pd-task-menu-scrim" onClick={onClose} onTouchStart={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
+      <div className="pd-task-menu" style={{ left, top }} role="menu">
+        <button type="button" role="menuitem" onClick={onEdit}>Edit</button>
+        <button type="button" role="menuitem" className="danger" onClick={onDelete}>Delete</button>
+      </div>
+    </>,
+    document.body
+  );
+}
+
+function TodayTaskRow({ task, running, liveSeconds, onToggle, onCyclePriority, onToggleTrack, onOpenMenu }) {
   const trackLabel = formatDuration(liveSeconds, running);
   const subtaskLabel = task.subtasks && task.subtasks.length
     ? `${task.subtasks.filter(Boolean).length}/${task.subtasks.length} subtasks` : null;
+
+  const pressTimer = useRef(null);
+  const pressStart = useRef(null);
+
+  const clearPress = () => { clearTimeout(pressTimer.current); pressTimer.current = null; };
+  const startPress = (x, y) => {
+    pressStart.current = { x, y };
+    clearPress();
+    pressTimer.current = setTimeout(() => onOpenMenu(task, pressStart.current), LONG_PRESS_MS);
+  };
+  const movePress = (x, y) => {
+    if (!pressStart.current) return;
+    if (Math.hypot(x - pressStart.current.x, y - pressStart.current.y) > 10) clearPress();
+  };
+
   return (
-    <li className="pd-today-row">
+    <li className="pd-today-row"
+      onTouchStart={(e) => { const t = e.touches[0]; startPress(t.clientX, t.clientY); }}
+      onTouchMove={(e) => { const t = e.touches[0]; movePress(t.clientX, t.clientY); }}
+      onTouchEnd={clearPress}
+      onMouseDown={(e) => { if (e.button === 0) startPress(e.clientX, e.clientY); }}
+      onMouseMove={(e) => movePress(e.clientX, e.clientY)}
+      onMouseUp={clearPress}
+      onMouseLeave={clearPress}
+      onContextMenu={(e) => { e.preventDefault(); onOpenMenu(task, { x: e.clientX, y: e.clientY }); }}>
       <button className={`pd-check pd-press ${task.done ? "done" : ""}`}
         onClick={onToggle} aria-label={task.done ? "Mark as not done" : "Mark as done"}>
         <svg width="13" height="13" viewBox="0 0 12 12"><path d="M2 6.5L4.8 9L10 3.5" fill="none" stroke="#0A0A0A" strokeWidth="2" strokeLinecap="round" /></svg>
@@ -40,7 +84,10 @@ function TodayTaskRow({ task, running, liveSeconds, onToggle, onCyclePriority, o
 /*  the day's tasks as the hero, with what's coming up below. Charts    */
 /*  live on the Insights screen, not here.                              */
 /* ------------------------------------------------------------------ */
-export function TodayScreen({ projects, inbox, runningTaskId, runStart, tick, completionLog, focusLog, onToggle, onCyclePriority, onToggleTrack }) {
+export function TodayScreen({
+  projects, inbox, runningTaskId, runStart, tick, completionLog, focusLog,
+  onToggle, onCyclePriority, onToggleTrack, onOpenProject, onOpenTask, onDeleteTask,
+}) {
   const today = todayISO();
   const items = useMemo(() => computeTodayView(projects, inbox), [projects, inbox]);
   const openCount = items.filter((t) => !t.done).length;
@@ -49,6 +96,7 @@ export function TodayScreen({ projects, inbox, runningTaskId, runStart, tick, co
   const liveDelta = runningTaskId ? (Date.now() - runStart) / 1000 : 0;
   const focusSeconds = (focusLog[today] || 0) + liveDelta;
   const upcoming = useMemo(() => computeUpcoming(projects, inbox), [projects, inbox]);
+  const [menu, setMenu] = useState(null); // { task, x, y }
 
   return (
     <div className="pd-today">
@@ -74,7 +122,8 @@ export function TodayScreen({ projects, inbox, runningTaskId, runStart, tick, co
                 liveSeconds={liveTaskSeconds(t, runningTaskId, runStart)}
                 onToggle={() => onToggle(t.id)}
                 onCyclePriority={() => onCyclePriority(t.id)}
-                onToggleTrack={() => onToggleTrack(t.id)} />
+                onToggleTrack={() => onToggleTrack(t.id)}
+                onOpenMenu={(task, pos) => setMenu({ task, x: pos.x, y: pos.y })} />
             ))}
           </ul>
         )}
@@ -86,7 +135,12 @@ export function TodayScreen({ projects, inbox, runningTaskId, runStart, tick, co
               {upcoming.map((t) => {
                 const due = dueLabel(t.deadline);
                 return (
-                  <li key={t.id} className="pd-upcoming-row">
+                  <li key={t.id} className="pd-upcoming-row pd-press"
+                    onClick={() => (t.projectId ? onOpenProject(t.projectId) : onOpenTask(t))}>
+                    <button type="button" className="pd-check pd-check-sm pd-press"
+                      onClick={(e) => { e.stopPropagation(); onToggle(t.id); }} aria-label="Mark as done">
+                      <svg width="11" height="11" viewBox="0 0 12 12"><path d="M2 6.5L4.8 9L10 3.5" fill="none" stroke="#0A0A0A" strokeWidth="2" strokeLinecap="round" /></svg>
+                    </button>
                     <div className="pd-priority-dot" style={{ background: PRIORITY_COLOR[t.priority || "med"], marginTop: 0 }} />
                     <div className="pd-upcoming-info">
                       <div className="pd-upcoming-title">{t.title}</div>
@@ -100,6 +154,13 @@ export function TodayScreen({ projects, inbox, runningTaskId, runStart, tick, co
           </>
         )}
       </div>
+
+      {menu && (
+        <TaskMenu x={menu.x} y={menu.y}
+          onEdit={() => { onOpenTask(menu.task); setMenu(null); }}
+          onDelete={() => { onDeleteTask(menu.task); setMenu(null); }}
+          onClose={() => setMenu(null)} />
+      )}
     </div>
   );
 }

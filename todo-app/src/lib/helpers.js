@@ -157,8 +157,8 @@ export function moveBy(list, id, dir) {
 export function computeUpcoming(projects, inbox, limit = 6) {
   const today = todayISO();
   const all = [
-    ...inbox.map((t) => ({ ...t, projectName: null })),
-    ...projects.flatMap((p) => p.tasks.map((t) => ({ ...t, projectName: p.name }))),
+    ...inbox.map((t) => ({ ...t, projectId: null, projectName: null })),
+    ...projects.flatMap((p) => p.tasks.map((t) => ({ ...t, projectId: p.id, projectName: p.name }))),
   ];
   return all
     .filter((t) => !t.recurring && !t.done && t.deadline && t.deadline > today)
