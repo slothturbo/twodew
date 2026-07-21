@@ -41,6 +41,18 @@ export function htmlToPlain(html) {
   const tmp = new DOMParser().parseFromString(html, "text/html").body;
   return tmp.textContent || "";
 }
+// htmlToPlain's .textContent collapses every <br>/block boundary into one unbroken
+// string — no good for "first line" or "checklist lines" extraction. This treats <br>
+// and block-element closing tags as line breaks first, then strips markup the same
+// DOMParser-backed way as sanitizeHtml/htmlToPlain above.
+export function htmlToLines(html) {
+  const withBreaks = html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(div|p|li|h[1-6])>/gi, "\n");
+  const tmp = new DOMParser().parseFromString(withBreaks, "text/html").body;
+  return (tmp.textContent || "").split("\n").map((l) => l.trim()).filter(Boolean);
+}
+export function htmlToFirstLine(html) {
+  return htmlToLines(html)[0] || "";
+}
 export function imageFileToDataURL(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();

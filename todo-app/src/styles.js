@@ -717,7 +717,9 @@ button{touch-action:manipulation;}
   border:1px solid var(--line); border-radius:var(--r-pill); color:var(--ink); cursor:pointer;
 }
 .pd-review-chip:hover{border-color:var(--accent); color:var(--accent);}
+.pd-review-chip.active{border-color:var(--accent); background:var(--accent); color:var(--accent-ink);}
 .pd-review-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; padding-top:14px; border-top:1px solid var(--line);}
+.pd-review-checkbox{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); cursor:pointer;}
 
 /* ---- redesign: priority dot + recurring toggle (shared by TaskRow + TodayTaskRow) ---- */
 .pd-priority-dot{

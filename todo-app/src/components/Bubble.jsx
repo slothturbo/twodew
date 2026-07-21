@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { escapeHtml, sanitizeHtml, htmlToPlain, imageFileToDataURL } from "../lib/html";
+import { escapeHtml, sanitizeHtml, htmlToPlain, htmlToFirstLine, imageFileToDataURL } from "../lib/html";
 import { useKeyboardInset } from "../lib/hooks";
 
 /* ------------------------------------------------------------------ */
@@ -53,7 +53,7 @@ function handlePlainPaste(e) {
 const PANEL_MIN_H = 240;
 const DEFAULT_PANEL_H = 380;
 
-export function Bubble({ note, color, isMobile, onSave, onDelete, dragProps, touchReorderStart }) {
+export function Bubble({ note, color, isMobile, onSave, onDelete, onCreateTask, dragProps, touchReorderStart }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [panelHeight, setPanelHeight] = useState(DEFAULT_PANEL_H);
@@ -94,6 +94,15 @@ export function Bubble({ note, color, isMobile, onSave, onDelete, dragProps, tou
   const cancelPanel = () => close(); // Esc = discard changes
 
   const panelCmd = (name, val = null) => { document.execCommand(name, false, val); panelRef.current && panelRef.current.focus(); };
+
+  // Pre-fills from the current text selection inside the panel, if any; otherwise
+  // falls back to the note's first line — never blocks on there being a selection.
+  const createTask = () => {
+    const sel = window.getSelection();
+    const fromSelection = sel && !sel.isCollapsed && panelRef.current && panelRef.current.contains(sel.anchorNode)
+      ? sel.toString().trim() : "";
+    onCreateTask(note, fromSelection || htmlToFirstLine(note.text));
+  };
 
   const insertImagesIntoPanel = async (files) => {
     for (const f of files) {
@@ -187,6 +196,9 @@ export function Bubble({ note, color, isMobile, onSave, onDelete, dragProps, tou
                 <ToolbarButtons cmd={panelCmd} />
               </div>
               <div className="pd-panel-actions">
+                {onCreateTask && (
+                  <button type="button" onClick={createTask} title="Create task from this note">✚</button>
+                )}
                 <button type="button" onClick={() => setFullscreen((f) => !f)}
                   title={fullscreen ? "Exit full screen" : "Full screen"}>{fullscreen ? "⤡" : "⤢"}</button>
                 <button type="button" onClick={commitPanel} title="Save & close">✕</button>

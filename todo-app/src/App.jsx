@@ -11,6 +11,7 @@ import { Bubble } from "./components/Bubble";
 import { CommandPalette } from "./components/CommandPalette";
 import { Sidebar } from "./components/Sidebar";
 import { CaptureBar } from "./components/CaptureBar";
+import { NoteToTaskModal } from "./components/NoteToTaskModal";
 import { SyncStatus } from "./components/SyncStatus";
 import { DeferMenu } from "./components/DeferMenu";
 import { TodayScreen } from "./screens/Today";
@@ -577,7 +578,7 @@ function FocusBanner({ task, projectName, seconds, onStop, onOpen }) {
 /*  Single-task editor — for inbox tasks reached from the Calendar,     */
 /*  which have no project page of their own to land on.                 */
 /* ------------------------------------------------------------------ */
-function TaskEditModal({ task, onClose, onTitle, onDeadline, onStartTime, onEndTime, onCyclePriority, onToggleRecurring, onToggleDone, onDelete, onOpenDefer }) {
+function TaskEditModal({ task, onClose, onTitle, onDeadline, onStartTime, onEndTime, onCyclePriority, onToggleRecurring, onToggleDone, onDelete, onOpenDefer, onOpenSourceNote }) {
   return (
     <div className="pd-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="pd-panel" role="dialog" aria-modal="true" aria-label="Task details" style={{ height: "auto" }}>
@@ -610,6 +611,9 @@ function TaskEditModal({ task, onClose, onTitle, onDeadline, onStartTime, onEndT
           <div className="pd-form-row">
             {!task.recurring && (
               <button type="button" className="pd-nextup-btn" onClick={(e) => onOpenDefer(e.currentTarget)}>defer</button>
+            )}
+            {task.sourceNoteId && (
+              <button type="button" className="pd-nextup-btn ghost" onClick={onOpenSourceNote}>↳ view source note</button>
             )}
             <button type="button" className="pd-danger-btn pd-press" onClick={onDelete}>delete task</button>
           </div>
@@ -774,6 +778,7 @@ function AppShell({ userId }) {
   const [deferMenuAnchor, setDeferMenuAnchor] = useState(null); // { x, y } — defer popover opened from the task editor
   const [paletteOpen, setPaletteOpen] = useState(false); // command palette (Cmd/Ctrl+K)
   const [reviewOpen, setReviewOpen] = useState(false); // Inbox review modal
+  const [noteToTask, setNoteToTask] = useState(null); // { note, prefillTitle } — "Create task" dialog from a Brain note
   // Sidebar collapse is a device-local UI preference, not app data — localStorage, not the Supabase blob.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("pd-sidebar-collapsed") === "1");
   const toggleSidebarCollapsed = useCallback(() => {
@@ -819,7 +824,7 @@ function AppShell({ userId }) {
   // single-task editor) — guards the global shortcut listener below from leaking `/`,
   // `n`, and arrow-key handling through to the Projects screen behind the modal.
   const modalOpenRef = useRef(false);
-  modalOpenRef.current = reviewOpen || !!editingTaskId;
+  modalOpenRef.current = reviewOpen || !!editingTaskId || !!noteToTask;
 
   // Mirror the redesign's root-level state into refs so the debounced persist() below
   // can always read the latest values, no matter which piece of state triggered the save.
@@ -1366,6 +1371,12 @@ function AppShell({ userId }) {
     }, parsed.projectId);
   };
   const commitCapturedNote = (title, projectId) => createNoteInTarget(title, projectId);
+  // Brain note -> task conversion (NoteToTaskModal). `titles` is one entry unless the
+  // "extract checklist lines" option produced more — each becomes its own task, all
+  // linked back to the source note via sourceNoteId. The note itself is never touched.
+  const createTasksFromNote = (titles, targetProjectId, sourceNoteId) => {
+    for (const title of titles) createTaskInTarget({ title, sourceNoteId }, targetProjectId);
+  };
   // Inbox review's "convert to note" — a dedicated undo (rather than reusing
   // deleteInboxTaskWithUndo) so the toast message and restore both make sense for a
   // conversion rather than a plain delete.
@@ -1806,7 +1817,8 @@ function AppShell({ userId }) {
               <BrainScreen projects={projects} notes={notes} isMobile={isMobile}
                 onSaveNote={(id, text) => locateAndPatchNote(id, (n) => ({ ...n, text }))}
                 onDeleteNote={deleteNoteGlobalWithUndo}
-                onDropImages={addStandaloneImageNotes} />
+                onDropImages={addStandaloneImageNotes}
+                onCreateTask={(note, prefillTitle) => setNoteToTask({ note, prefillTitle })} />
             )}
             {screen === "calendar" && (
               <CalendarScreen projects={projects} inbox={inbox} isMobile={isMobile}
@@ -2020,6 +2032,7 @@ function AppShell({ userId }) {
                     <Bubble key={n.id} note={n} color={selColor} isMobile={isMobile}
                       onSave={(text) => patchProject({ notes: selected.notes.map((x) => (x.id === n.id ? { ...x, text } : x)) })}
                       onDelete={() => deleteNoteWithUndo(n)}
+                      onCreateTask={(note, prefillTitle) => setNoteToTask({ note, prefillTitle })}
                       touchReorderStart={touchReorderStart}
                       dragProps={{
                         className: `${dragNoteId === n.id || touchDragId === n.id ? "dragging" : ""} ${dragOverNoteId === n.id ? "drag-over" : ""}`,
@@ -2069,7 +2082,8 @@ function AppShell({ userId }) {
           onToggleRecurring={() => toggleTaskRecurring(editingTask.id)}
           onToggleDone={() => toggleTaskDone(editingTask.id)}
           onDelete={deleteEditingTask}
-          onOpenDefer={(el) => { const r = el.getBoundingClientRect(); setDeferMenuAnchor({ x: r.left, y: r.bottom + 6 }); }} />
+          onOpenDefer={(el) => { const r = el.getBoundingClientRect(); setDeferMenuAnchor({ x: r.left, y: r.bottom + 6 }); }}
+          onOpenSourceNote={() => { setScreen("brain"); setEditingTaskId(null); }} />
       )}
       {editingTask && deferMenuAnchor && (
         <DeferMenu x={deferMenuAnchor.x} y={deferMenuAnchor.y}
@@ -2089,6 +2103,12 @@ function AppShell({ userId }) {
           onConvertToNote={convertInboxTaskToNote}
           onDelete={deleteInboxTaskWithUndo}
           onClose={() => setReviewOpen(false)} />
+      )}
+
+      {noteToTask && (
+        <NoteToTaskModal note={noteToTask.note} prefillTitle={noteToTask.prefillTitle} projects={projects}
+          onCreate={(titles, targetProjectId) => createTasksFromNote(titles, targetProjectId, noteToTask.note.id)}
+          onClose={() => setNoteToTask(null)} />
       )}
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)}
