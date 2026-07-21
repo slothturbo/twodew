@@ -157,6 +157,7 @@ button{touch-action:manipulation;}
 }
 .pd-dp-btn:hover{border-color:var(--accent);}
 .pd-dp-btn.empty{color:var(--muted);}
+.pd-dp-icon{flex-shrink:0;}
 .pd-dp-pop{
   z-index:200; width:280px; max-width:calc(100vw - 16px);
   background:var(--raised); border:1px solid var(--line); border-radius:12px; padding:14px;
@@ -214,26 +215,30 @@ button{touch-action:manipulation;}
   border:1px solid var(--line); border-radius:var(--r-md); background:var(--raised); color:var(--ink);
 }
 .pd-quickadd:focus{outline:none; border-color:var(--accent); box-shadow:var(--focus-ring);}
-.pd-tasklist{margin-top:14px; list-style:none;}
+.pd-tasklist{margin-top:14px; list-style:none; display:flex; flex-direction:column; gap:10px;}
 .pd-tasksep{
   font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase;
-  color:var(--muted); padding:12px 6px 4px; border-top:1px solid var(--line); margin-top:6px;
+  color:var(--muted); padding:12px 6px 4px; margin-top:6px;
 }
-.pd-task-outer{position:relative; overflow:hidden; border-bottom:1px solid var(--line);}
+.pd-task-outer{position:relative; overflow:hidden; border-radius:var(--r-lg);}
 .pd-task-bg{
   position:absolute; inset:0; display:flex; align-items:center; justify-content:space-between;
   padding:0 18px; font-size:18px; pointer-events:none;
 }
 .pd-task-bg .bg-done{color:var(--ok);} .pd-task-bg .bg-del{color:var(--danger);}
+/* Task cards — each task is its own card (title on its own full-width row so
+   it's never squeezed by the date/priority/tracking controls), not a dense list row. */
 .pd-task{
-  display:flex; align-items:center; gap:8px; padding:12px 6px; background:var(--card);
-  animation:pd-in .2s ease; flex-wrap:wrap; position:relative;
-  border-top:2px solid transparent; touch-action:pan-y;
+  display:flex; flex-direction:column; gap:10px; padding:14px 16px; background:var(--card);
+  border:1px solid var(--line); border-radius:var(--r-lg);
+  animation:pd-in .2s ease; position:relative; touch-action:pan-y;
 }
+.pd-task-row1{display:flex; align-items:center; gap:8px;}
+.pd-task-row2{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
 .pd-task.snapback{transition:transform .25s ease;}
 .pd-task:hover .pd-x, .pd-task:hover .pd-reorder button, .pd-task:hover .pd-drag-handle{opacity:1;}
 .pd-task.dragging{opacity:.35;}
-.pd-task.drag-over{border-top-color:var(--accent);}
+.pd-task.drag-over{border-color:var(--accent);}
 .pd-task.completed{opacity:.55;}
 @keyframes pd-in{from{opacity:0; transform:translateY(3px);} to{opacity:1; transform:none;}}
 .pd-check{
@@ -247,15 +252,14 @@ button{touch-action:manipulation;}
    (Today) fall back to this so the check is always visible, not a dark-on-dark blank. */
 .pd-check.done{background:var(--accent); border-color:var(--accent);}
 .pd-check.done svg{opacity:1;}
-.pd-task-title{flex:1; min-width:120px; font-size:15px; border:none; background:transparent; color:var(--ink); font-family:'Plus Jakarta Sans',sans-serif; padding:4px 0;}
+.pd-task-title{flex:1; min-width:0; font-size:16px; border:none; background:transparent; color:var(--ink); font-family:'Plus Jakarta Sans',sans-serif; padding:4px 0;}
 .pd-task-title:focus{outline:none;}
 .pd-task-title.done{color:var(--muted); text-decoration:line-through;}
 .pd-task-due{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); white-space:nowrap;}
 .pd-task-tracked{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); white-space:nowrap;}
-.pd-task-meta{display:flex; align-items:center; gap:8px;}
 .pd-x{
   background:none; border:none; color:var(--muted); cursor:pointer; font-size:16px;
-  opacity:0; transition:opacity .15s ease; padding:8px 10px; margin:-6px -4px;
+  opacity:0; transition:opacity .15s ease; padding:8px 10px; margin:-6px -4px; flex-shrink:0;
 }
 .pd-x:focus-visible{opacity:1;}
 
@@ -513,11 +517,9 @@ button{touch-action:manipulation;}
   .pd-back{display:inline-block;}
   .pd-reorder{display:none;}
   .pd-drag-handle, .pd-x{opacity:1;}
-  /* Task rows: tighter padding/gaps (Material list spec: 8dp row padding, 4dp tight gaps),
-     and due/date/delete pinned to their own line so wrap is predictable, not ragged. */
-  .pd-task{padding:9px 4px; gap:6px;}
+  .pd-task{padding:11px 10px; gap:8px;}
   .pd-task-title{padding:2px 0;}
-  .pd-task-meta{flex-basis:100%; justify-content:flex-end; margin-left:56px; gap:6px; margin-top:-2px;}
+  .pd-task-row2{gap:6px;}
   .pd-task-due{font-size:10.5px;}
   .pd-dp-btn{padding:4px 8px; min-height:30px; font-size:11px;}
   .pd-x{padding:6px 6px; margin:-4px -2px;}

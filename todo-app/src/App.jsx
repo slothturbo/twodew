@@ -208,7 +208,13 @@ function DatePicker({ value, onChange, placeholder = "Set date", startTime, endT
   return (
     <div className="pd-dp-wrap" ref={ref}>
       <button type="button" ref={btnRef} className={`pd-dp-btn pd-press ${!value ? "empty" : ""}`} onClick={() => setOpen((o) => !o)}>
-        📅 {value ? fmtDate(value) : placeholder}{timeLabel ? ` · ${timeLabel}` : ""}
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" className="pd-dp-icon" aria-hidden="true">
+          <rect x="2" y="3.5" width="12" height="10.5" rx="2" stroke="currentColor" strokeWidth="1.3" />
+          <line x1="2" y1="6.5" x2="14" y2="6.5" stroke="currentColor" strokeWidth="1.3" />
+          <line x1="5.5" y1="1.5" x2="5.5" y2="4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          <line x1="10.5" y1="1.5" x2="10.5" y2="4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+        {value ? fmtDate(value) : placeholder}{timeLabel ? ` · ${timeLabel}` : ""}
       </button>
       {open && createPortal(
         <div className="pd-dp-pop" ref={popRef} role="dialog" aria-label="Choose date"
@@ -238,10 +244,11 @@ function DatePicker({ value, onChange, placeholder = "Set date", startTime, endT
             <div className="pd-dp-time-row">
               <TimeField value={startTime} ariaLabel="Start time" placeholder="08:00"
                 onCommit={(v) => onStartTime(v)}
-                onEnter={(v) => { if (v && !endTime) onEndTime(addHour(v)); }} />
+                onEnter={(v) => { if (v && !endTime) onEndTime(addHour(v)); setOpen(false); }} />
               <span className="pd-dp-time-sep">–</span>
               <TimeField value={endTime} ariaLabel="End time" placeholder="09:00"
-                onCommit={(v) => onEndTime(v)} />
+                onCommit={(v) => onEndTime(v)}
+                onEnter={() => setOpen(false)} />
             </div>
           )}
           <div className="pd-dp-foot">
@@ -414,54 +421,58 @@ function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle
         onDragStart={dragHandlers?.onDragStart} onDragOver={dragHandlers?.onDragOver}
         onDrop={dragHandlers?.onDrop} onDragEnd={dragHandlers?.onDragEnd}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
-        {!completed ? (
-          <>
-            <span className="pd-drag-handle"
-              onMouseDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => { e.stopPropagation(); touchReorderStart?.(e, task.id, rkind); }}>⠿</span>
-            <div className="pd-reorder">
-              <button onClick={reorderUp} disabled={!canUp} aria-label="Move up">▲</button>
-              <button onClick={reorderDown} disabled={!canDown} aria-label="Move down">▼</button>
-            </div>
-          </>
-        ) : (
-          <span className="pd-drag-handle" style={{ visibility: "hidden" }}>⠿</span>
-        )}
-        <button className={`pd-check pd-press ${task.done ? "done" : ""}`}
-          style={task.done ? { background: color.fg, borderColor: color.fg } : {}}
-          onClick={onToggle} aria-label={task.done ? "Mark as not done" : "Mark as done"}>
-          <svg width="13" height="13" viewBox="0 0 12 12"><path d="M2 6.5L4.8 9L10 3.5" fill="none" stroke="#0A0A0A" strokeWidth="2" strokeLinecap="round" /></svg>
-        </button>
-        {!completed && onCyclePriority && (
-          <button type="button" className="pd-priority-dot" title={`Priority: ${task.priority || "med"} (click to change)`}
-            style={{ background: PRIORITY_COLOR[task.priority || "med"] }}
-            onClick={onCyclePriority} aria-label="Cycle task priority" />
-        )}
-        <input className={`pd-task-title ${task.done ? "done" : ""}`} value={task.title}
-          onChange={(e) => onTitle(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.target.blur(); }} aria-label="Task title" />
-        <div className="pd-task-meta">
-          {!running && task.trackedSeconds > 0 && (
-            <span className="pd-task-tracked" title="Time tracked on this task">⏱ {formatDuration(task.trackedSeconds, false)}</span>
+        <div className="pd-task-row1">
+          {!completed ? (
+            <>
+              <span className="pd-drag-handle"
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => { e.stopPropagation(); touchReorderStart?.(e, task.id, rkind); }}>⠿</span>
+              <div className="pd-reorder">
+                <button onClick={reorderUp} disabled={!canUp} aria-label="Move up">▲</button>
+                <button onClick={reorderDown} disabled={!canDown} aria-label="Move down">▼</button>
+              </div>
+            </>
+          ) : (
+            <span className="pd-drag-handle" style={{ visibility: "hidden" }}>⠿</span>
           )}
-          {due && <span className={`pd-task-due ${due.overdue ? "overdue" : ""}`}>{due.text}</span>}
-          {!completed && (
-            <DatePicker value={task.deadline} onChange={onDeadline}
-              startTime={task.startTime} endTime={task.endTime} onStartTime={onStartTime} onEndTime={onEndTime} />
+          <button className={`pd-check pd-press ${task.done ? "done" : ""}`}
+            style={task.done ? { background: color.fg, borderColor: color.fg } : {}}
+            onClick={onToggle} aria-label={task.done ? "Mark as not done" : "Mark as done"}>
+            <svg width="13" height="13" viewBox="0 0 12 12"><path d="M2 6.5L4.8 9L10 3.5" fill="none" stroke="#0A0A0A" strokeWidth="2" strokeLinecap="round" /></svg>
+          </button>
+          {!completed && onCyclePriority && (
+            <button type="button" className="pd-priority-dot" title={`Priority: ${task.priority || "med"} (click to change)`}
+              style={{ background: PRIORITY_COLOR[task.priority || "med"] }}
+              onClick={onCyclePriority} aria-label="Cycle task priority" />
           )}
-          {!completed && onToggleRecurring && (
-            <button type="button" className={`pd-recur-toggle ${task.recurring ? "on" : ""}`} title="Repeats daily"
-              onClick={onToggleRecurring} aria-label={task.recurring ? "Stop repeating daily" : "Repeat daily"}>↻</button>
-          )}
-          {!completed && onToggleTrack && (
-            <button type="button" className={`pd-track-pill ${running ? "running" : ""}`} onClick={onToggleTrack}
-              aria-label={running ? "Stop tracking time" : "Start tracking time"}>
-              <span>{running ? "❙❙" : "▶"}</span>
-              {formatDuration(liveSeconds, running) && <span>{formatDuration(liveSeconds, running)}</span>}
-            </button>
-          )}
+          <input className={`pd-task-title ${task.done ? "done" : ""}`} value={task.title}
+            onChange={(e) => onTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.target.blur(); }} aria-label="Task title" />
           <button className="pd-x" aria-label="Delete task" onClick={onDelete}>×</button>
         </div>
+        {(!completed || task.trackedSeconds > 0) && (
+          <div className="pd-task-row2">
+            {!running && task.trackedSeconds > 0 && (
+              <span className="pd-task-tracked" title="Time tracked on this task">⏱ {formatDuration(task.trackedSeconds, false)}</span>
+            )}
+            {due && <span className={`pd-task-due ${due.overdue ? "overdue" : ""}`}>{due.text}</span>}
+            {!completed && (
+              <DatePicker value={task.deadline} onChange={onDeadline}
+                startTime={task.startTime} endTime={task.endTime} onStartTime={onStartTime} onEndTime={onEndTime} />
+            )}
+            {!completed && onToggleRecurring && (
+              <button type="button" className={`pd-recur-toggle ${task.recurring ? "on" : ""}`} title="Repeats daily"
+                onClick={onToggleRecurring} aria-label={task.recurring ? "Stop repeating daily" : "Repeat daily"}>↻</button>
+            )}
+            {!completed && onToggleTrack && (
+              <button type="button" className={`pd-track-pill ${running ? "running" : ""}`} onClick={onToggleTrack}
+                aria-label={running ? "Stop tracking time" : "Start tracking time"}>
+                <span>{running ? "❙❙" : "▶"}</span>
+                {formatDuration(liveSeconds, running) && <span>{formatDuration(liveSeconds, running)}</span>}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </li>
   );
