@@ -22,6 +22,7 @@ import {
   parseQuickAdd, attentionSort, moveItem, moveBy, taskTimeRangeLabel, PALETTE, DOW, MONTHS,
   tomorrowISO, thisWeekendISO, nextWeekMondayISO,
 } from "./lib/helpers";
+import { parseCapture } from "./lib/capture";
 
 /* ------------------------------------------------------------------ */
 /*  v8 — native-feel: fixed shell, swipes, undo, FAB, bottom sheet     */
@@ -92,6 +93,9 @@ function migrateTask(t) {
     startTime: null,
     endTime: null,
     subtasks: [],
+    estimateMinutes: null,
+    contexts: [],
+    sourceNoteId: null,
     ...t,
   };
 }
@@ -1213,6 +1217,25 @@ function AppShell({ userId }) {
 
     if (targetProjectId) update((prev) => prev.map((p) => (p.id === targetProjectId ? { ...p, tasks: [...p.tasks, task] } : p)));
     else updateInbox((ts) => [...ts, task]);
+  };
+
+  // Creates a brand-new task directly in an arbitrary project (or the inbox, when
+  // targetProjectId is null) — neither addInboxTask nor addTaskTitled can target an
+  // arbitrary project, since each is hardcoded to one destination. Shared by quick-capture,
+  // Inbox review's "assign project" action, and Brain note→task conversion.
+  const createTaskInTarget = (fields, targetProjectId) => {
+    const task = migrateTask({ id: uid(), done: false, createdAt: Date.now(), ...fields });
+    if (targetProjectId) update((prev) => prev.map((p) => (p.id === targetProjectId ? { ...p, tasks: [...p.tasks, task] } : p)));
+    else updateInbox((ts) => [...ts, task]);
+    return task;
+  };
+  // Same idea for notes — used by quick-capture's note mode and Inbox review's
+  // "convert to note" action, both of which can target either a project or standalone.
+  const createNoteInTarget = (text, targetProjectId) => {
+    const note = { id: uid(), text: textToHtml(text), createdAt: Date.now() };
+    if (targetProjectId) update((prev) => prev.map((p) => (p.id === targetProjectId ? { ...p, notes: [...p.notes, note] } : p)));
+    else updateNotes((ns) => [...ns, note]);
+    return note;
   };
 
   // Fast defer/snooze — every destination captures the task's prior date/time (and

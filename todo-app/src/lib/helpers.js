@@ -274,3 +274,10 @@ export function nextWeekMondayISO() {
   const nextMon = new Date(start); nextMon.setDate(nextMon.getDate() + 8); // next week's Monday
   return `${nextMon.getFullYear()}-${pad(nextMon.getMonth() + 1)}-${pad(nextMon.getDate())}`;
 }
+// Next date (today included) that falls on the given day-of-week (0=Sun..6=Sat, matches DOW) —
+// used by the quick-capture parser for bare weekday names like "call mom tuesday".
+export function nextWeekdayISO(targetDow) {
+  const d = new Date();
+  d.setDate(d.getDate() + ((targetDow - d.getDay() + 7) % 7));
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
