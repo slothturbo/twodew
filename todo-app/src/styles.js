@@ -702,6 +702,23 @@ button{touch-action:manipulation;}
 .pd-capture-chip:hover{border-color:var(--danger); color:var(--danger);}
 .pd-capture-chip span{opacity:.6;}
 
+/* ---- P2: Inbox review modal ---- */
+.pd-review-entry{margin-bottom:14px;}
+.pd-review-progress{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted);}
+.pd-review-body{display:flex; flex-direction:column; gap:18px;}
+.pd-review-title{font-family:'Plus Jakarta Sans',sans-serif; font-size:20px; font-weight:700; line-height:1.3;}
+.pd-review-section{display:flex; flex-direction:column; gap:8px;}
+.pd-review-label{
+  font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted);
+}
+.pd-review-chiprow{display:flex; flex-wrap:wrap; gap:6px;}
+.pd-review-chip{
+  all:unset; box-sizing:border-box; padding:6px 12px; font-size:13px; font-family:'Plus Jakarta Sans',sans-serif;
+  border:1px solid var(--line); border-radius:var(--r-pill); color:var(--ink); cursor:pointer;
+}
+.pd-review-chip:hover{border-color:var(--accent); color:var(--accent);}
+.pd-review-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; padding-top:14px; border-top:1px solid var(--line);}
+
 /* ---- redesign: priority dot + recurring toggle (shared by TaskRow + TodayTaskRow) ---- */
 .pd-priority-dot{
   width:9px; height:9px; border-radius:50%; border:none; cursor:pointer; flex-shrink:0;

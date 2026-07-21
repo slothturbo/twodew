@@ -619,6 +619,119 @@ function TaskEditModal({ task, onClose, onTitle, onDeadline, onStartTime, onEndT
   );
 }
 
+const ESTIMATE_PRESETS = [15, 30, 60, 120];
+
+/* ------------------------------------------------------------------ */
+/*  Inbox review — one item at a time, quick actions, keyboard-first.  */
+/*  Lives inline (not a separate component file) because it reuses    */
+/*  DatePicker, which is itself local to this file.                   */
+/* ------------------------------------------------------------------ */
+function InboxReview({
+  tasks, projects, onAssignProject, onSetDeadline, onSetStartTime, onSetEndTime,
+  onSetPriority, onSetEstimate, onConvertToNote, onDelete, onClose,
+}) {
+  const [ids] = useState(() => tasks.map((t) => t.id));
+  const [idx, setIdx] = useState(0);
+  const [clarifiedCount, setClarifiedCount] = useState(0);
+  const total = ids.length;
+
+  const currentId = ids[idx];
+  const current = tasks.find((t) => t.id === currentId);
+
+  const advance = (wasClarified) => {
+    if (wasClarified) setClarifiedCount((c) => c + 1);
+    if (idx + 1 >= total) onClose();
+    else setIdx((i) => i + 1);
+  };
+
+  // A task can vanish out from under us (deleted/converted elsewhere, e.g. a synced
+  // second device) — skip past a missing id rather than getting stuck.
+  useEffect(() => {
+    if (!current && idx < total) {
+      if (idx + 1 >= total) onClose();
+      else setIdx((i) => i + 1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current, idx]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (e.key === "ArrowRight" || e.key === "Enter") { e.preventDefault(); advance(false); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); setIdx((i) => Math.max(0, i - 1)); }
+      else if (e.key === "1") { onSetPriority(currentId, "low"); advance(true); }
+      else if (e.key === "2") { onSetPriority(currentId, "med"); advance(true); }
+      else if (e.key === "3") { onSetPriority(currentId, "high"); advance(true); }
+      else if (e.key === "Backspace") { e.preventDefault(); onDelete(current); advance(true); }
+      else if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentId, current, idx]);
+
+  if (!current) return null;
+
+  return (
+    <div className="pd-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="pd-panel pd-review-panel" role="dialog" aria-modal="true" aria-label="Inbox review">
+        <div className="pd-panel-header">
+          <div className="pd-review-progress">{clarifiedCount} of {total} clarified</div>
+          <div className="pd-panel-actions">
+            <button type="button" onClick={onClose} title="Close (Esc)">✕</button>
+          </div>
+        </div>
+        <div className="pd-panel-body pd-review-body">
+          <div className="pd-review-title">{current.title}</div>
+
+          <div className="pd-review-section">
+            <div className="pd-review-label">Project</div>
+            <div className="pd-review-chiprow">
+              <button type="button" className="pd-review-chip" onClick={() => advance(false)}>keep in inbox</button>
+              {projects.map((p) => (
+                <button type="button" key={p.id} className="pd-review-chip"
+                  onClick={() => { onAssignProject(current.id, p.id); advance(true); }}>{p.name}</button>
+              ))}
+            </div>
+          </div>
+
+          <div className="pd-review-section">
+            <div className="pd-review-label">Date</div>
+            <DatePicker value={current.deadline} onChange={(iso) => onSetDeadline(current.id, iso)}
+              startTime={current.startTime} endTime={current.endTime}
+              onStartTime={(v) => onSetStartTime(current.id, v)} onEndTime={(v) => onSetEndTime(current.id, v)} />
+          </div>
+
+          <div className="pd-review-section">
+            <div className="pd-review-label">Priority (1 low · 2 med · 3 high)</div>
+            <button type="button" className="pd-priority-dot" style={{ background: PRIORITY_COLOR[current.priority || "med"] }}
+              title={`Priority: ${current.priority || "med"} (click to cycle)`}
+              onClick={() => onSetPriority(current.id, PRIORITY_CYCLE[current.priority] || "med")} />
+          </div>
+
+          <div className="pd-review-section">
+            <div className="pd-review-label">Estimate</div>
+            <div className="pd-review-chiprow">
+              {ESTIMATE_PRESETS.map((m) => (
+                <button type="button" key={m} className="pd-review-chip"
+                  onClick={() => { onSetEstimate(current.id, m); advance(true); }}>
+                  {m >= 60 ? `${m / 60}h` : `${m}m`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="pd-review-actions">
+            <button type="button" className="pd-nextup-btn ghost" onClick={() => { onConvertToNote(current); advance(true); }}>convert to note</button>
+            <button type="button" className="pd-danger-btn pd-press" onClick={() => { onDelete(current); advance(true); }}>delete</button>
+            <button type="button" className="pd-nextup-btn" onClick={() => advance(false)}>next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Main app                                                           */
 /* ------------------------------------------------------------------ */
@@ -660,6 +773,7 @@ function AppShell({ userId }) {
   const [editingTaskId, setEditingTaskId] = useState(null); // inbox task open in the single-task editor
   const [deferMenuAnchor, setDeferMenuAnchor] = useState(null); // { x, y } — defer popover opened from the task editor
   const [paletteOpen, setPaletteOpen] = useState(false); // command palette (Cmd/Ctrl+K)
+  const [reviewOpen, setReviewOpen] = useState(false); // Inbox review modal
   // Sidebar collapse is a device-local UI preference, not app data — localStorage, not the Supabase blob.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("pd-sidebar-collapsed") === "1");
   const toggleSidebarCollapsed = useCallback(() => {
@@ -701,6 +815,11 @@ function AppShell({ userId }) {
   const syncBaseRef = useRef(null);
   const syncConflictsRef = useRef([]); syncConflictsRef.current = syncConflicts;
   selectedIdRef.current = selectedId;
+  // True while a modal that owns its own keyboard scheme is open (Inbox review, the
+  // single-task editor) — guards the global shortcut listener below from leaking `/`,
+  // `n`, and arrow-key handling through to the Projects screen behind the modal.
+  const modalOpenRef = useRef(false);
+  modalOpenRef.current = reviewOpen || !!editingTaskId;
 
   // Mirror the redesign's root-level state into refs so the debounced persist() below
   // can always read the latest values, no matter which piece of state triggered the save.
@@ -1247,6 +1366,20 @@ function AppShell({ userId }) {
     }, parsed.projectId);
   };
   const commitCapturedNote = (title, projectId) => createNoteInTarget(title, projectId);
+  // Inbox review's "convert to note" — a dedicated undo (rather than reusing
+  // deleteInboxTaskWithUndo) so the toast message and restore both make sense for a
+  // conversion rather than a plain delete.
+  const convertInboxTaskToNote = (task) => {
+    const idx = inboxRef.current.findIndex((t) => t.id === task.id);
+    const note = createNoteInTarget(task.title, null);
+    updateInbox((ts) => ts.filter((t) => t.id !== task.id));
+    showUndo("Converted to note", () => {
+      updateNotes((ns) => ns.filter((n) => n.id !== note.id));
+      updateInbox((ts) => {
+        const next = [...ts]; next.splice(Math.min(idx, next.length), 0, task); return next;
+      });
+    });
+  };
 
   // Fast defer/snooze — every destination captures the task's prior date/time (and
   // project, for "return to Inbox") before mutating, then offers the same undo-toast
@@ -1519,7 +1652,7 @@ function AppShell({ userId }) {
       const tag = e.target.tagName;
       const typing = tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPaletteOpen(true); return; }
-      if (typing) return;
+      if (typing || modalOpenRef.current) return;
       if (e.key === "/") { e.preventDefault(); searchRef.current?.focus(); }
       if (e.key === "n" && selectedIdRef.current) { e.preventDefault(); quickAddRef.current?.focus(); }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -1623,6 +1756,11 @@ function AppShell({ userId }) {
             )}
             {screen === "tasks" && (
               <div className="pd-tasks-screen">
+                {activeInboxTasks.length > 0 && (
+                  <button type="button" className="pd-nextup-btn pd-review-entry" onClick={() => setReviewOpen(true)}>
+                    review inbox ({activeInboxTasks.length})
+                  </button>
+                )}
                 {inbox.length === 0 ? (
                   <p className="pd-empty">No standalone tasks yet — add one above and it'll show up here (it won't belong to any project).</p>
                 ) : (
@@ -1938,6 +2076,19 @@ function AppShell({ userId }) {
           onSelect={(destination) => { deferTask(editingTask.id, destination); setDeferMenuAnchor(null); }}
           onPickDate={() => setDeferMenuAnchor(null)}
           onClose={() => setDeferMenuAnchor(null)} />
+      )}
+
+      {reviewOpen && activeInboxTasks.length > 0 && (
+        <InboxReview tasks={activeInboxTasks} projects={projects}
+          onAssignProject={moveTaskToProject}
+          onSetDeadline={(id, iso) => locateAndPatchTask(id, (t) => ({ ...t, deadline: iso }))}
+          onSetStartTime={(id, v) => locateAndPatchTask(id, (t) => ({ ...t, startTime: v }))}
+          onSetEndTime={(id, v) => locateAndPatchTask(id, (t) => ({ ...t, endTime: v }))}
+          onSetPriority={(id, p) => locateAndPatchTask(id, (t) => ({ ...t, priority: p }))}
+          onSetEstimate={(id, m) => locateAndPatchTask(id, (t) => ({ ...t, estimateMinutes: m }))}
+          onConvertToNote={convertInboxTaskToNote}
+          onDelete={deleteInboxTaskWithUndo}
+          onClose={() => setReviewOpen(false)} />
       )}
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)}
