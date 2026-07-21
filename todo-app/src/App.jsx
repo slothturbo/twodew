@@ -10,6 +10,7 @@ import { Ring, ProgressFill } from "./components/Ring";
 import { Bubble } from "./components/Bubble";
 import { CommandPalette } from "./components/CommandPalette";
 import { Sidebar } from "./components/Sidebar";
+import { CaptureBar } from "./components/CaptureBar";
 import { SyncStatus } from "./components/SyncStatus";
 import { DeferMenu } from "./components/DeferMenu";
 import { TodayScreen } from "./screens/Today";
@@ -655,7 +656,6 @@ function AppShell({ userId }) {
   const [runStart, setRunStart] = useState(null);
   const [tick, setTick] = useState(0); // forces re-render for live elapsed-time display only
   const [screen, setScreen] = useState("today"); // "today" | "projects" | "calendar" | "stats" — never persisted
-  const [inboxInput, setInboxInput] = useState(""); // top-bar quick-add text
   const [brainInput, setBrainInput] = useState(""); // top-bar note capture (Brain screen)
   const [editingTaskId, setEditingTaskId] = useState(null); // inbox task open in the single-task editor
   const [deferMenuAnchor, setDeferMenuAnchor] = useState(null); // { x, y } — defer popover opened from the task editor
@@ -1237,6 +1237,16 @@ function AppShell({ userId }) {
     else updateNotes((ns) => [...ns, note]);
     return note;
   };
+  // The topbar CaptureBar's two commit paths — undated captures default to today,
+  // matching addInboxTask/addTaskTitled's existing behavior for a bare title.
+  const commitCapturedTask = (parsed) => {
+    createTaskInTarget({
+      title: parsed.title, deadline: parsed.deadline || todayISO(), startTime: parsed.startTime,
+      timeLabel: parsed.timeLabel, priority: parsed.priority, estimateMinutes: parsed.estimateMinutes,
+      contexts: parsed.contexts,
+    }, parsed.projectId);
+  };
+  const commitCapturedNote = (title, projectId) => createNoteInTarget(title, projectId);
 
   // Fast defer/snooze — every destination captures the task's prior date/time (and
   // project, for "return to Inbox") before mutating, then offers the same undo-toast
@@ -1595,9 +1605,8 @@ function AppShell({ userId }) {
                   {screen === "today" ? greeting : <>{SCREEN_TITLES[screen]}<span>.</span></>}
                 </div>
                 <div className="pd-topbar-quickadd-wrap">
-                  <input className="pd-topbar-quickadd" placeholder='Add a task…  try "call mom tomorrow 5pm"'
-                    value={inboxInput} onChange={(e) => setInboxInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter" && addInboxTask(inboxInput)) setInboxInput(""); }} />
+                  <CaptureBar projects={projects} onCommitTask={commitCapturedTask} onCommitNote={commitCapturedNote}
+                    placeholder='Add a task…  try "call mom tomorrow 5pm !high #kitchen"' />
                 </div>
                 <div className="pd-topbar-date">{longDateToday}</div>
               </>

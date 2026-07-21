@@ -682,6 +682,26 @@ button{touch-action:manipulation;}
 .pd-topbar-quickadd:focus{outline:none; border-color:var(--accent); box-shadow:var(--focus-ring);}
 .pd-topbar-date{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); white-space:nowrap;}
 
+/* ---- P2: universal quick-capture bar (chip preview + task/note mode) ---- */
+.pd-capturebar-row{display:flex; align-items:stretch; gap:8px;}
+.pd-capturebar-row .pd-topbar-quickadd{flex:1;}
+.pd-capture-mode{
+  all:unset; box-sizing:border-box; flex-shrink:0; padding:0 12px; display:flex; align-items:center;
+  font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.04em; text-transform:uppercase;
+  border:1px solid var(--line); border-radius:var(--r-md); color:var(--muted); cursor:pointer;
+  transition:border-color .12s ease, color .12s ease;
+}
+.pd-capture-mode:hover{border-color:var(--accent); color:var(--accent);}
+.pd-capture-mode.note{border-color:var(--accent); color:var(--accent);}
+.pd-capture-chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
+.pd-capture-chip{
+  all:unset; box-sizing:border-box; display:flex; align-items:center; gap:4px; padding:3px 9px;
+  font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink);
+  border:1px solid var(--line); border-radius:var(--r-pill); cursor:pointer; white-space:nowrap;
+}
+.pd-capture-chip:hover{border-color:var(--danger); color:var(--danger);}
+.pd-capture-chip span{opacity:.6;}
+
 /* ---- redesign: priority dot + recurring toggle (shared by TaskRow + TodayTaskRow) ---- */
 .pd-priority-dot{
   width:9px; height:9px; border-radius:50%; border:none; cursor:pointer; flex-shrink:0;
