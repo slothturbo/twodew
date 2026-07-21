@@ -11,6 +11,7 @@ import { Bubble } from "./components/Bubble";
 import { CommandPalette } from "./components/CommandPalette";
 import { Sidebar } from "./components/Sidebar";
 import { SyncStatus } from "./components/SyncStatus";
+import { DeferMenu } from "./components/DeferMenu";
 import { TodayScreen } from "./screens/Today";
 import { CalendarScreen } from "./screens/Calendar";
 import { BrainScreen } from "./screens/BrainScreen";
@@ -19,6 +20,7 @@ import {
   uid, pad, todayISO, localDateISO, colorOf, progressOf, dueLabel, fmtDate, nextDue, startedLabel,
   PRIORITY_CYCLE, PRIORITY_COLOR, liveTaskSeconds, formatDuration, currentStreak, weekBars, heatmapCells,
   parseQuickAdd, attentionSort, moveItem, moveBy, taskTimeRangeLabel, PALETTE, DOW, MONTHS,
+  tomorrowISO, thisWeekendISO, nextWeekMondayISO,
 } from "./lib/helpers";
 
 /* ------------------------------------------------------------------ */
@@ -570,7 +572,7 @@ function FocusBanner({ task, projectName, seconds, onStop, onOpen }) {
 /*  Single-task editor — for inbox tasks reached from the Calendar,     */
 /*  which have no project page of their own to land on.                 */
 /* ------------------------------------------------------------------ */
-function TaskEditModal({ task, onClose, onTitle, onDeadline, onStartTime, onEndTime, onCyclePriority, onToggleRecurring, onToggleDone, onDelete }) {
+function TaskEditModal({ task, onClose, onTitle, onDeadline, onStartTime, onEndTime, onCyclePriority, onToggleRecurring, onToggleDone, onDelete, onOpenDefer }) {
   return (
     <div className="pd-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="pd-panel" role="dialog" aria-modal="true" aria-label="Task details" style={{ height: "auto" }}>
@@ -600,7 +602,12 @@ function TaskEditModal({ task, onClose, onTitle, onDeadline, onStartTime, onEndT
               ↻ {task.recurring ? "Repeats daily" : "One-time"}
             </button>
           </div>
-          <button type="button" className="pd-danger-btn pd-press" style={{ alignSelf: "flex-start" }} onClick={onDelete}>delete task</button>
+          <div className="pd-form-row">
+            {!task.recurring && (
+              <button type="button" className="pd-nextup-btn" onClick={(e) => onOpenDefer(e.currentTarget)}>defer</button>
+            )}
+            <button type="button" className="pd-danger-btn pd-press" onClick={onDelete}>delete task</button>
+          </div>
         </div>
       </div>
     </div>
@@ -647,6 +654,7 @@ function AppShell({ userId }) {
   const [inboxInput, setInboxInput] = useState(""); // top-bar quick-add text
   const [brainInput, setBrainInput] = useState(""); // top-bar note capture (Brain screen)
   const [editingTaskId, setEditingTaskId] = useState(null); // inbox task open in the single-task editor
+  const [deferMenuAnchor, setDeferMenuAnchor] = useState(null); // { x, y } — defer popover opened from the task editor
   const [paletteOpen, setPaletteOpen] = useState(false); // command palette (Cmd/Ctrl+K)
   // Sidebar collapse is a device-local UI preference, not app data — localStorage, not the Supabase blob.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("pd-sidebar-collapsed") === "1");
@@ -1187,6 +1195,64 @@ function AppShell({ userId }) {
     }
     setSyncConflicts((cs) => cs.filter((x) => !(x.type === conflict.type && x.id === conflict.id)));
   };
+
+  // Moves a task to a different project, or (targetProjectId === null) back to the
+  // inbox — removes it from wherever it currently lives and appends it at the target.
+  // Shared by the Next Up card's "move to project" control and defer's "return to
+  // Inbox" destination.
+  const moveTaskToProject = (taskId, targetProjectId) => {
+    const fromInbox = inboxRef.current.find((t) => t.id === taskId);
+    const fromProject = projectsRef.current.find((p) => p.tasks.some((t) => t.id === taskId));
+    const task = fromInbox || fromProject?.tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    if (fromProject?.id === targetProjectId) return; // already there
+    if (fromInbox && !targetProjectId) return; // already in the inbox
+
+    if (fromInbox) updateInbox((ts) => ts.filter((t) => t.id !== taskId));
+    else update((prev) => prev.map((p) => (p.id === fromProject.id ? { ...p, tasks: p.tasks.filter((t) => t.id !== taskId) } : p)));
+
+    if (targetProjectId) update((prev) => prev.map((p) => (p.id === targetProjectId ? { ...p, tasks: [...p.tasks, task] } : p)));
+    else updateInbox((ts) => [...ts, task]);
+  };
+
+  // Fast defer/snooze — every destination captures the task's prior date/time (and
+  // project, for "return to Inbox") before mutating, then offers the same undo-toast
+  // pattern as deleteAnyTaskWithUndo above. Not offered in the UI for recurring tasks:
+  // computeTodayView shows a recurring task regardless of `deadline`, so changing that
+  // field has no effect on when it reappears — there's nothing sensible for "defer" to do.
+  const deferTask = (taskId, destination) => {
+    const found = inboxRef.current.find((t) => t.id === taskId)
+      || projectsRef.current.flatMap((p) => p.tasks).find((t) => t.id === taskId);
+    if (!found) return;
+    const prior = { deadline: found.deadline, startTime: found.startTime, endTime: found.endTime };
+    const priorProjectId = projectsRef.current.find((p) => p.tasks.some((t) => t.id === taskId))?.id || null;
+    const restore = () => {
+      locateAndPatchTask(taskId, (t) => ({ ...t, deadline: prior.deadline, startTime: prior.startTime, endTime: prior.endTime }));
+      if (destination === "inbox" && priorProjectId) moveTaskToProject(taskId, priorProjectId);
+    };
+
+    let label;
+    if (destination === "later") {
+      locateAndPatchTask(taskId, (t) => ({ ...t, deadline: todayISO(), startTime: null, endTime: null }));
+      label = "deferred to later today";
+    } else if (destination === "tomorrow") {
+      locateAndPatchTask(taskId, (t) => ({ ...t, deadline: tomorrowISO() }));
+      label = "deferred to tomorrow";
+    } else if (destination === "weekend") {
+      locateAndPatchTask(taskId, (t) => ({ ...t, deadline: thisWeekendISO() }));
+      label = "deferred to this weekend";
+    } else if (destination === "nextweek") {
+      locateAndPatchTask(taskId, (t) => ({ ...t, deadline: nextWeekMondayISO() }));
+      label = "deferred to next week";
+    } else if (destination === "inbox") {
+      locateAndPatchTask(taskId, (t) => ({ ...t, deadline: null, startTime: null, endTime: null }));
+      moveTaskToProject(taskId, null);
+      label = "moved to inbox";
+    } else {
+      return; // "date" is handled by opening the DatePicker directly, not through here
+    }
+    showUndo(label, restore);
+  };
   const deleteNoteWithUndo = (note) => {
     const projId = selected.id;
     const idx = selected.notes.findIndex((n) => n.id === note.id);
@@ -1520,7 +1586,8 @@ function AppShell({ userId }) {
               <TodayScreen projects={projects} inbox={inbox} runningTaskId={runningTaskId} runStart={runStart} tick={tick}
                 completionLog={completionLog} focusLog={focusLog}
                 onToggle={toggleTaskDone} onCyclePriority={cycleTaskPriority} onToggleTrack={toggleTrack}
-                onOpenProject={openProject} onOpenTask={(t) => setEditingTaskId(t.id)} onDeleteTask={deleteAnyTaskWithUndo} />
+                onOpenProject={openProject} onOpenTask={(t) => setEditingTaskId(t.id)} onDeleteTask={deleteAnyTaskWithUndo}
+                onDeferTask={deferTask} onMoveTask={moveTaskToProject} />
             )}
             {screen === "tasks" && (
               <div className="pd-tasks-screen">
@@ -1831,7 +1898,14 @@ function AppShell({ userId }) {
           onCyclePriority={() => cycleTaskPriority(editingTask.id)}
           onToggleRecurring={() => toggleTaskRecurring(editingTask.id)}
           onToggleDone={() => toggleTaskDone(editingTask.id)}
-          onDelete={deleteEditingTask} />
+          onDelete={deleteEditingTask}
+          onOpenDefer={(el) => { const r = el.getBoundingClientRect(); setDeferMenuAnchor({ x: r.left, y: r.bottom + 6 }); }} />
+      )}
+      {editingTask && deferMenuAnchor && (
+        <DeferMenu x={deferMenuAnchor.x} y={deferMenuAnchor.y}
+          onSelect={(destination) => { deferTask(editingTask.id, destination); setDeferMenuAnchor(null); }}
+          onPickDate={() => setDeferMenuAnchor(null)}
+          onClose={() => setDeferMenuAnchor(null)} />
       )}
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)}

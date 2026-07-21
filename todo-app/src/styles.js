@@ -268,6 +268,18 @@ button{touch-action:manipulation;}
   font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.08em;
   text-transform:uppercase; color:var(--muted); margin:28px 0 8px;
 }
+/* A section label rendered as a <button> for collapsible sections (Done today) —
+   reset button chrome but keep the exact same look as the plain-div version. */
+.pd-section-toggle{
+  all:unset; box-sizing:border-box; display:flex; align-items:center; gap:6px;
+  font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--muted); margin:28px 0 8px;
+}
+.pd-section-toggle.clickable{cursor:pointer;}
+.pd-section-toggle.clickable:hover{color:var(--ink);}
+.pd-section-count{opacity:.7;}
+.pd-section-caret{display:inline-block; transition:transform var(--dur-fast) ease; font-size:10px;}
+.pd-section-caret.open{transform:rotate(180deg);}
 .pd-noise-input{
   width:100%; padding:10px 14px; font-size:14px; font-family:'Plus Jakarta Sans',sans-serif;
   border:1px solid var(--line); border-radius:20px; background:var(--raised); color:var(--ink);
@@ -720,23 +732,22 @@ button{touch-action:manipulation;}
 .pd-stat-label{font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:14px; letter-spacing:-0.01em; opacity:.7;}
 .pd-stat-value{font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:46px; letter-spacing:-0.03em; line-height:1;}
 
-/* Today's tasks grouped one card per project (+ Inbox), filling the wide screen
-   instead of a single narrow list. */
-.pd-today-groups{display:grid; grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); gap:16px; align-items:start;}
-.pd-today-card{
-  background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg);
-  padding:14px 16px 4px; animation:pd-in .25s ease;
+/* Today's "next up" hero — one suggested task, pulled out of the regular buckets below. */
+.pd-nextup-card{
+  background:var(--card); border:1px solid var(--accent); border-radius:var(--r-lg);
+  padding:14px 16px 12px; animation:pd-in .25s ease; margin-bottom:8px;
 }
-.pd-today-card-head{display:flex; align-items:center; gap:8px; margin-bottom:2px;}
-.pd-today-card-dot{width:8px; height:8px; border-radius:50%; flex-shrink:0;}
-.pd-today-card-name{
-  flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:14px;
+.pd-nextup-card .pd-today-row{border-bottom:none;}
+.pd-nextup-actions{display:flex; gap:8px; margin-top:4px; padding-top:10px; border-top:1px solid var(--line);}
+.pd-nextup-btn{
+  all:unset; box-sizing:border-box; font-family:'IBM Plex Mono',monospace; font-size:11.5px;
+  color:var(--ink); background:var(--raised); border:1px solid var(--line); border-radius:999px;
+  padding:6px 13px; cursor:pointer; transition:border-color var(--dur-fast) ease;
 }
-.pd-today-card-count{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); flex-shrink:0;}
-.pd-today-card-name-link{cursor:pointer;}
-.pd-today-card-name-link:hover{text-decoration:underline;}
-.pd-today-card .pd-today-row:last-child{border-bottom:none;}
+.pd-nextup-btn:hover{border-color:var(--accent);}
+.pd-nextup-btn.ghost{background:transparent; color:var(--muted);}
+
+.pd-today-section + .pd-today-section{margin-top:4px;}
 
 .pd-today-list{list-style:none;}
 .pd-today-row{
@@ -774,6 +785,7 @@ button{touch-action:manipulation;}
 }
 .pd-task-menu button:hover{background:var(--card);}
 .pd-task-menu button.danger{color:var(--danger);}
+.pd-defer-menu, .pd-move-menu{max-height:min(320px, 70vh); overflow-y:auto;}
 
 /* ---- redesign: Today — Upcoming list ---- */
 .pd-upcoming-list{list-style:none;}

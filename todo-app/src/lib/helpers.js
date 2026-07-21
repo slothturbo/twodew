@@ -206,3 +206,71 @@ export function groupTodayByProject(items) {
   }
   return [...groups.values()];
 }
+
+const nowHM = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+
+// Ordered "what should I do next" candidates from computeTodayView's output — first
+// match wins for the Next Up card; the full order backs the "not this" replace control.
+// Tiers: a task whose scheduled time window is happening right now > a high-priority
+// task due today > (reserved: a project's marked next action, once that field exists)
+// > the most-overdue task > whatever's simply first in the existing sort, so there's
+// always *something* to suggest as long as any task is open.
+export function nextUpCandidates(items) {
+  const today = todayISO();
+  const hm = nowHM();
+  const open = items.filter((t) => !t.done);
+
+  const dueNow = open
+    .filter((t) => t.deadline === today && t.startTime && t.startTime <= hm && (!t.endTime || t.endTime > hm))
+    .sort((a, b) => (a.startTime < b.startTime ? -1 : 1));
+  const dueNowIds = new Set(dueNow.map((t) => t.id));
+
+  const highToday = open.filter((t) => !dueNowIds.has(t.id) && t.deadline === today && t.priority === "high");
+  const highTodayIds = new Set(highToday.map((t) => t.id));
+
+  const overdue = open
+    .filter((t) => !dueNowIds.has(t.id) && !highTodayIds.has(t.id) && t.deadline && t.deadline < today)
+    .sort((a, b) => (a.deadline < b.deadline ? -1 : 1));
+  const overdueIds = new Set(overdue.map((t) => t.id));
+
+  const rest = open.filter((t) => !dueNowIds.has(t.id) && !highTodayIds.has(t.id) && !overdueIds.has(t.id));
+
+  return [...dueNow, ...highToday, ...overdue, ...rest];
+}
+export function pickNextUp(items) {
+  return nextUpCandidates(items)[0] || null;
+}
+
+// Splits computeTodayView's remaining (non-next-up) open items into "Now" (due today
+// with no specific future time, overdue, undated, or recurring — i.e. everything that
+// isn't waiting on a later time-of-day today) and "Later today" (has a startTime that
+// hasn't arrived yet). Today's completions are returned separately for a collapsed
+// "Done today" section.
+export function splitTodayBuckets(items, excludeId) {
+  const today = todayISO();
+  const hm = nowHM();
+  const open = items.filter((t) => !t.done && t.id !== excludeId);
+  const laterToday = open.filter((t) => t.deadline === today && t.startTime && t.startTime > hm);
+  const laterTodayIds = new Set(laterToday.map((t) => t.id));
+  const now = open.filter((t) => !laterTodayIds.has(t.id));
+  const doneToday = items.filter((t) => t.done);
+  return { now, laterToday, doneToday };
+}
+
+// Defer destinations — each returns an ISO date (or, for "later today", the deadline
+// stays/becomes today so only startTime/endTime need clearing at the call site).
+export function tomorrowISO() {
+  const d = new Date(); d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+export function thisWeekendISO() {
+  const d = new Date();
+  const addDays = (6 - d.getDay() + 7) % 7; // 0 if today is already Saturday; 6 if Sunday (next Saturday, not the day just passed)
+  d.setDate(d.getDate() + addDays);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+export function nextWeekMondayISO() {
+  const start = startOfWeek(new Date()); // this week's Sunday
+  const nextMon = new Date(start); nextMon.setDate(nextMon.getDate() + 8); // next week's Monday
+  return `${nextMon.getFullYear()}-${pad(nextMon.getMonth() + 1)}-${pad(nextMon.getDate())}`;
+}

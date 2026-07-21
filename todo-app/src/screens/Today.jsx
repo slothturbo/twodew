@@ -1,23 +1,26 @@
 import { useRef, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { DeferMenu } from "../components/DeferMenu";
+import { MoveMenu } from "../components/MoveMenu";
 import {
   todayISO, dueLabel, PRIORITY_COLOR, liveTaskSeconds, formatDuration, currentStreak,
-  computeTodayView, computeUpcoming, groupTodayByProject, taskTimeRangeLabel,
+  computeTodayView, computeUpcoming, nextUpCandidates, splitTodayBuckets, taskTimeRangeLabel,
 } from "../lib/helpers";
 
 const LONG_PRESS_MS = 450;
 
-// Small Edit/Delete popup for a long-pressed (or right-clicked) task row.
+// Small Edit/Defer/Delete popup for a long-pressed (or right-clicked) task row.
 // Portaled to <body> since this screen could in principle sit under a
 // backdrop-filter ancestor, which breaks position:fixed coordinate math.
-function TaskMenu({ x, y, onEdit, onDelete, onClose }) {
+function TaskMenu({ x, y, onEdit, onDefer, onDelete, onClose }) {
   const left = Math.min(x, window.innerWidth - 160);
-  const top = Math.min(y, window.innerHeight - 110);
+  const top = Math.min(y, window.innerHeight - 140);
   return createPortal(
     <>
       <div className="pd-task-menu-scrim" onClick={onClose} onTouchStart={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
       <div className="pd-task-menu" style={{ left, top }} role="menu">
         <button type="button" role="menuitem" onClick={onEdit}>Edit</button>
+        {onDefer && <button type="button" role="menuitem" onClick={onDefer}>Defer</button>}
         <button type="button" role="menuitem" className="danger" onClick={onDelete}>Delete</button>
       </div>
     </>,
@@ -68,6 +71,7 @@ function TodayTaskRow({ task, running, liveSeconds, onToggle, onCyclePriority, o
         </div>
         <div className="pd-today-meta">
           <span>{taskTimeRangeLabel(task) || "Today"}</span>
+          {task.projectName && <span>· {task.projectName}</span>}
           {task.recurring && <span title="Repeats daily">↻</span>}
           {subtaskLabel && <span>{subtaskLabel}</span>}
         </div>
@@ -81,18 +85,56 @@ function TodayTaskRow({ task, running, liveSeconds, onToggle, onCyclePriority, o
   );
 }
 
+// A section of task rows sharing one label — Now / Later today / Done today (collapsible).
+function TaskSection({ label, tasks, collapsible, open, onToggleOpen, ...rowProps }) {
+  if (!tasks.length) return null;
+  const showList = !collapsible || open;
+  return (
+    <div className="pd-today-section">
+      <button type="button" className={`pd-section-label pd-section-toggle ${collapsible ? "clickable" : ""}`}
+        onClick={collapsible ? onToggleOpen : undefined} disabled={!collapsible}>
+        {label} <span className="pd-section-count">{tasks.length}</span>
+        {collapsible && <span className={`pd-section-caret ${open ? "open" : ""}`}>▾</span>}
+      </button>
+      {showList && (
+        <ul className="pd-today-list">
+          {tasks.map((t) => (
+            <TodayTaskRow key={t.id} task={t}
+              running={rowProps.runningTaskId === t.id}
+              liveSeconds={liveTaskSeconds(t, rowProps.runningTaskId, rowProps.runStart)}
+              onToggle={() => rowProps.onToggle(t.id)}
+              onCyclePriority={() => rowProps.onCyclePriority(t.id)}
+              onToggleTrack={() => rowProps.onToggleTrack(t.id)}
+              onOpenMenu={rowProps.onOpenMenu}
+              onOpenProject={rowProps.onOpenProject} onOpenTask={rowProps.onOpenTask} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
-/*  Today — content-first (Things-style): a one-line stat strip, then   */
-/*  the day's tasks as the hero, with what's coming up below. Charts    */
-/*  live on the Insights screen, not here.                              */
+/*  Today — led by a single "next up" suggestion so the first screen   */
+/*  answers "what should I do next" in one glance, with the rest of    */
+/*  today's work bucketed by urgency below. Charts live on Insights.   */
 /* ------------------------------------------------------------------ */
 export function TodayScreen({
   projects, inbox, runningTaskId, runStart, tick, completionLog, focusLog,
   onToggle, onCyclePriority, onToggleTrack, onOpenProject, onOpenTask, onDeleteTask,
+  onDeferTask, onMoveTask,
 }) {
   const today = todayISO();
   const items = useMemo(() => computeTodayView(projects, inbox), [projects, inbox]);
-  const groups = useMemo(() => groupTodayByProject(items), [items]);
+  const candidates = useMemo(() => nextUpCandidates(items), [items]);
+  const [nextUpIndex, setNextUpIndex] = useState(0);
+  const nextUp = candidates.length ? candidates[nextUpIndex % candidates.length] : null;
+
+  const { now, laterToday, doneToday } = useMemo(
+    () => splitTodayBuckets(items, nextUp?.id),
+    [items, nextUp]
+  );
+
   const openCount = items.filter((t) => !t.done).length;
   const completedToday = completionLog[today] || 0;
   const streak = useMemo(() => currentStreak(completionLog), [completionLog, tick]);
@@ -100,12 +142,29 @@ export function TodayScreen({
   const focusSeconds = (focusLog[today] || 0) + liveDelta;
   const upcoming = useMemo(() => computeUpcoming(projects, inbox), [projects, inbox]);
   const [menu, setMenu] = useState(null); // { task, x, y }
+  const [deferMenu, setDeferMenu] = useState(null); // { task, x, y }
+  const [moveMenu, setMoveMenu] = useState(null); // { task, x, y }
+  const [doneOpen, setDoneOpen] = useState(false); // collapsed by default
 
   // Master focus control: stops whatever's running, or — if nothing is — starts the
-  // top item on today's list, so there's always one obvious button to jump into focus.
-  const firstOpenTask = items.find((t) => !t.done);
-  const masterFocusTarget = runningTaskId || firstOpenTask?.id;
+  // suggested next-up task, so there's always one obvious button to jump into focus.
+  const masterFocusTarget = runningTaskId || nextUp?.id;
   const focusRunning = !!runningTaskId;
+
+  const openDefer = (task, anchorEl) => {
+    const r = anchorEl.getBoundingClientRect();
+    setDeferMenu({ task, x: r.left, y: r.bottom + 6 });
+  };
+  const openMove = (task, anchorEl) => {
+    const r = anchorEl.getBoundingClientRect();
+    setMoveMenu({ task, x: r.left, y: r.bottom + 6 });
+  };
+
+  const rowProps = {
+    runningTaskId, runStart, onToggle, onCyclePriority, onToggleTrack,
+    onOpenMenu: (task, pos) => setMenu({ task, x: pos.x, y: pos.y }),
+    onOpenProject, onOpenTask,
+  };
 
   return (
     <div className="pd-today">
@@ -131,43 +190,46 @@ export function TodayScreen({
           </div>
           <button type="button" className={`pd-focus-fab ${focusRunning ? "running" : ""}`}
             disabled={!masterFocusTarget} onClick={() => masterFocusTarget && onToggleTrack(masterFocusTarget)}
-            title={focusRunning ? "Stop focus" : "Start focus on your top task"}
+            title={focusRunning ? "Stop focus" : "Start focus on your next-up task"}
             aria-label={focusRunning ? "Stop focus" : "Start focus"}>
             <span>::</span>
           </button>
         </div>
 
-        <div className="pd-section-label">Today</div>
+        {nextUp && (
+          <div className="pd-nextup-card">
+            <div className="pd-section-label">Next up</div>
+            <ul className="pd-today-list pd-nextup-list">
+              <TodayTaskRow key={nextUp.id} task={nextUp}
+                running={runningTaskId === nextUp.id}
+                liveSeconds={liveTaskSeconds(nextUp, runningTaskId, runStart)}
+                onToggle={() => onToggle(nextUp.id)}
+                onCyclePriority={() => onCyclePriority(nextUp.id)}
+                onToggleTrack={() => onToggleTrack(nextUp.id)}
+                onOpenMenu={(task, pos) => setMenu({ task, x: pos.x, y: pos.y })}
+                onOpenProject={onOpenProject} onOpenTask={onOpenTask} />
+            </ul>
+            <div className="pd-nextup-actions">
+              {!nextUp.recurring && (
+                <button type="button" className="pd-nextup-btn" onClick={(e) => openDefer(nextUp, e.currentTarget)}>defer</button>
+              )}
+              <button type="button" className="pd-nextup-btn" onClick={(e) => openMove(nextUp, e.currentTarget)}>move</button>
+              {candidates.length > 1 && (
+                <button type="button" className="pd-nextup-btn ghost" onClick={() => setNextUpIndex((i) => i + 1)}>not this</button>
+              )}
+            </div>
+          </div>
+        )}
+
         {items.length === 0 ? (
           <p className="pd-empty">Nothing on deck. Add a task above, or check back tomorrow.</p>
         ) : (
-          <div className="pd-today-groups">
-            {groups.map((g) => (
-              <div key={g.key} className="pd-today-card">
-                <div className="pd-today-card-head">
-                  <span className="pd-today-card-dot" style={{ background: g.color ? g.color.fg : "var(--muted)" }} />
-                  {g.key === "inbox" ? (
-                    <span className="pd-today-card-name">{g.name}</span>
-                  ) : (
-                    <span className="pd-today-card-name pd-today-card-name-link" onClick={() => onOpenProject(g.key)}>{g.name}</span>
-                  )}
-                  <span className="pd-today-card-count">{g.tasks.filter((t) => t.done).length}/{g.tasks.length}</span>
-                </div>
-                <ul className="pd-today-list">
-                  {g.tasks.map((t) => (
-                    <TodayTaskRow key={t.id} task={t}
-                      running={runningTaskId === t.id}
-                      liveSeconds={liveTaskSeconds(t, runningTaskId, runStart)}
-                      onToggle={() => onToggle(t.id)}
-                      onCyclePriority={() => onCyclePriority(t.id)}
-                      onToggleTrack={() => onToggleTrack(t.id)}
-                      onOpenMenu={(task, pos) => setMenu({ task, x: pos.x, y: pos.y })}
-                      onOpenProject={onOpenProject} onOpenTask={onOpenTask} />
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
+          <>
+            <TaskSection label="Now" tasks={now} {...rowProps} />
+            <TaskSection label="Later today" tasks={laterToday} {...rowProps} />
+            <TaskSection label="Done today" tasks={doneToday} collapsible open={doneOpen}
+              onToggleOpen={() => setDoneOpen((o) => !o)} {...rowProps} />
+          </>
         )}
 
         {upcoming.length > 0 && (
@@ -200,8 +262,20 @@ export function TodayScreen({
       {menu && (
         <TaskMenu x={menu.x} y={menu.y}
           onEdit={() => { onOpenTask(menu.task); setMenu(null); }}
+          onDefer={menu.task.recurring ? null : () => { setDeferMenu({ task: menu.task, x: menu.x, y: menu.y }); setMenu(null); }}
           onDelete={() => { onDeleteTask(menu.task); setMenu(null); }}
           onClose={() => setMenu(null)} />
+      )}
+      {deferMenu && (
+        <DeferMenu x={deferMenu.x} y={deferMenu.y}
+          onSelect={(destination) => { onDeferTask(deferMenu.task.id, destination); setDeferMenu(null); }}
+          onPickDate={() => { onOpenTask(deferMenu.task); setDeferMenu(null); }}
+          onClose={() => setDeferMenu(null)} />
+      )}
+      {moveMenu && (
+        <MoveMenu x={moveMenu.x} y={moveMenu.y} projects={projects} currentProjectId={moveMenu.task.projectId}
+          onSelect={(targetId) => { onMoveTask(moveMenu.task.id, targetId); setMoveMenu(null); }}
+          onClose={() => setMoveMenu(null)} />
       )}
     </div>
   );
