@@ -61,6 +61,26 @@ button{touch-action:manipulation;}
 .pd-overall-fill{height:100%; background:var(--accent); border-radius:0; transition:width .6s ease;}
 .pd-overall-label{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted); white-space:nowrap;}
 
+/* Sticky focus-mode banner — sits above the topbar on every screen while a task is tracked */
+.pd-focus-banner{
+  display:flex; align-items:center; gap:10px; padding:8px 20px;
+  padding-top:max(8px, env(safe-area-inset-top));
+  background:var(--accent); color:var(--accent-ink); cursor:pointer; flex-shrink:0;
+  font-family:'Plus Jakarta Sans',sans-serif; font-size:13px;
+}
+.pd-focus-dot{width:8px; height:8px; border-radius:50%; background:var(--accent-ink); flex-shrink:0; animation:pd-pulse 1.6s ease-in-out infinite;}
+.pd-focus-label{opacity:.75; white-space:nowrap;}
+.pd-focus-title{font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;}
+.pd-focus-project{opacity:.75; white-space:nowrap; flex-shrink:0;}
+.pd-focus-time{font-family:'IBM Plex Mono',monospace; font-weight:600; margin-left:auto; flex-shrink:0;}
+.pd-focus-stop{
+  all:unset; display:flex; align-items:center; gap:5px; background:rgba(0,0,0,0.18);
+  color:var(--accent-ink); padding:5px 11px; border-radius:999px; font-size:12px; cursor:pointer;
+  flex-shrink:0; font-family:'IBM Plex Mono',monospace; transition:background .15s ease;
+}
+.pd-focus-stop:hover{background:rgba(0,0,0,0.28);}
+@keyframes pd-pulse{0%,100%{opacity:1;} 50%{opacity:.3;}}
+
 .pd-body{flex:1; display:flex; min-height:0; position:relative; overflow:hidden;}
 .pd-left{
   width:380px; min-width:320px; border-right:1px solid var(--line); overflow-y:auto; padding:16px;
@@ -227,6 +247,7 @@ button{touch-action:manipulation;}
 .pd-task-title:focus{outline:none;}
 .pd-task-title.done{color:var(--muted); text-decoration:line-through;}
 .pd-task-due{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); white-space:nowrap;}
+.pd-task-tracked{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); white-space:nowrap;}
 .pd-task-meta{display:flex; align-items:center; gap:8px;}
 .pd-x{
   background:none; border:none; color:var(--muted); cursor:pointer; font-size:16px;
@@ -665,10 +686,17 @@ button{touch-action:manipulation;}
 .pd-today-card .pd-today-row:last-child{border-bottom:none;}
 
 .pd-today-list{list-style:none;}
-.pd-today-row{display:flex; align-items:flex-start; gap:10px; padding:12px 4px; border-bottom:1px solid var(--line);}
+.pd-today-row{
+  display:flex; align-items:flex-start; gap:10px; padding:12px 8px; margin:0 -8px;
+  border-bottom:1px solid var(--line); border-radius:var(--r-sm);
+  transition:background var(--dur-fast) ease;
+}
+.pd-today-row:hover{background:var(--raised);}
 .pd-today-info{flex:1; min-width:0;}
 .pd-today-title{font-size:14.5px;}
 .pd-today-title.done{color:var(--muted); text-decoration:line-through;}
+.pd-today-title-link{cursor:pointer;}
+.pd-today-title-link:hover{text-decoration:underline;}
 .pd-today-meta{
   display:flex; align-items:center; gap:8px; margin-top:4px; flex-wrap:wrap;
   font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted);
@@ -827,6 +855,9 @@ button{touch-action:manipulation;}
   .pd-stat-row{grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:16px;}
   .pd-stat-tile{padding:10px 8px; gap:8px;}
   .pd-stat-label{font-size:12px;}
+  .pd-focus-banner{padding:7px 14px; padding-top:max(7px, env(safe-area-inset-top)); font-size:12px; gap:8px;}
+  .pd-focus-label{display:none;}
+  .pd-focus-project{display:none;}
 
   /* Projects detail header — collapse to the smallest footprint that's still editable,
      so a task is visible without scrolling past name/client/location/phase/progress. */

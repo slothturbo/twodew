@@ -25,7 +25,7 @@ function TaskMenu({ x, y, onEdit, onDelete, onClose }) {
   );
 }
 
-function TodayTaskRow({ task, running, liveSeconds, onToggle, onCyclePriority, onToggleTrack, onOpenMenu }) {
+function TodayTaskRow({ task, running, liveSeconds, onToggle, onCyclePriority, onToggleTrack, onOpenMenu, onOpenProject, onOpenTask }) {
   const trackLabel = formatDuration(liveSeconds, running);
   const subtaskLabel = task.subtasks && task.subtasks.length
     ? `${task.subtasks.filter(Boolean).length}/${task.subtasks.length} subtasks` : null;
@@ -62,7 +62,10 @@ function TodayTaskRow({ task, running, liveSeconds, onToggle, onCyclePriority, o
         style={{ background: PRIORITY_COLOR[task.priority || "med"] }}
         onClick={onCyclePriority} aria-label="Cycle task priority" />
       <div className="pd-today-info">
-        <div className={`pd-today-title ${task.done ? "done" : ""}`}>{task.title}</div>
+        <div className={`pd-today-title pd-today-title-link ${task.done ? "done" : ""}`}
+          onClick={(e) => { e.stopPropagation(); (task.projectId ? onOpenProject(task.projectId) : onOpenTask(task)); }}>
+          {task.title}
+        </div>
         <div className="pd-today-meta">
           <span>{taskTimeRangeLabel(task) || "Today"}</span>
           {task.recurring && <span title="Repeats daily">↻</span>}
@@ -140,7 +143,8 @@ export function TodayScreen({
                       onToggle={() => onToggle(t.id)}
                       onCyclePriority={() => onCyclePriority(t.id)}
                       onToggleTrack={() => onToggleTrack(t.id)}
-                      onOpenMenu={(task, pos) => setMenu({ task, x: pos.x, y: pos.y })} />
+                      onOpenMenu={(task, pos) => setMenu({ task, x: pos.x, y: pos.y })}
+                      onOpenProject={onOpenProject} onOpenTask={onOpenTask} />
                   ))}
                 </ul>
               </div>

@@ -384,6 +384,9 @@ function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle
           onChange={(e) => onTitle(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.target.blur(); }} aria-label="Task title" />
         <div className="pd-task-meta">
+          {task.trackedSeconds > 0 && (
+            <span className="pd-task-tracked" title="Time tracked on this task">⏱ {formatDuration(task.trackedSeconds, false)}</span>
+          )}
           {due && <span className={`pd-task-due ${due.overdue ? "overdue" : ""}`}>{due.text}</span>}
           {!completed && (
             <DatePicker value={task.deadline} onChange={onDeadline}
@@ -397,6 +400,27 @@ function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle
         </div>
       </div>
     </li>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Focus-mode banner — sticky above the topbar on every screen while a  */
+/*  task is being tracked, so it's never unclear focus mode is running.  */
+/* ------------------------------------------------------------------ */
+function FocusBanner({ task, projectName, seconds, onStop, onOpen }) {
+  return (
+    <div className="pd-focus-banner" role="button" tabIndex={0} onClick={onOpen}
+      onKeyDown={(e) => { if (e.key === "Enter") onOpen(); }}>
+      <span className="pd-focus-dot" />
+      <span className="pd-focus-label">Focusing on</span>
+      <span className="pd-focus-title">{task.title}</span>
+      {projectName && <span className="pd-focus-project">· {projectName}</span>}
+      <span className="pd-focus-time">{formatDuration(seconds, true)}</span>
+      <button type="button" className="pd-focus-stop"
+        onClick={(e) => { e.stopPropagation(); onStop(); }} aria-label="Stop tracking">
+        <span>❙❙</span> Stop
+      </button>
+    </div>
   );
 }
 
@@ -759,6 +783,13 @@ function AppShell({ userId }) {
 
   // Jump to a project's detail view — shared by Today/Calendar's inline links and the command palette.
   const openProject = useCallback((id) => { setScreen("projects"); setSelectedId(id); }, []);
+
+  // The task/project currently being tracked, for the sticky focus banner — recomputed
+  // every render so it stays in sync with `tick`'s once-a-second re-render.
+  const runningProject = runningTaskId ? projects.find((p) => p.tasks.some((t) => t.id === runningTaskId)) : null;
+  const runningTask = runningTaskId
+    ? (runningProject ? runningProject.tasks.find((t) => t.id === runningTaskId) : inbox.find((t) => t.id === runningTaskId))
+    : null;
   // Command palette "New project" quick action: prefill the Projects screen's creation form and open it.
   const startNewProject = useCallback((name) => {
     setScreen("projects"); setSelectedId(null);
@@ -1116,6 +1147,7 @@ function AppShell({ userId }) {
   const selColor = selected ? colorOf(selected) : null;
   const selPct = selected ? progressOf(selected) : null;
   const doneCount = selected ? selected.tasks.filter((t) => t.done).length : 0;
+  const selTrackedSeconds = selected ? selected.tasks.reduce((sum, t) => sum + (t.trackedSeconds || 0), 0) : 0;
   const activeTasks = selected ? selected.tasks.filter((t) => !t.done) : [];
   const completedTasks = selected ? selected.tasks.filter((t) => t.done) : [];
   const activeInboxTasks = inbox.filter((t) => !t.done);
@@ -1136,6 +1168,12 @@ function AppShell({ userId }) {
         )}
 
         <div className="pd-main">
+          {runningTask && (
+            <FocusBanner task={runningTask} projectName={runningProject?.name}
+              seconds={liveTaskSeconds(runningTask, runningTaskId, runStart)}
+              onStop={() => toggleTrack(runningTaskId)}
+              onOpen={() => (runningProject ? openProject(runningProject.id) : setScreen("today"))} />
+          )}
           <div className="pd-topbar">
             {screen === "projects" ? (
               <>
@@ -1359,6 +1397,7 @@ function AppShell({ userId }) {
               <div style={{ marginTop: 14 }} className="pd-overall-label">
                 {selPct === null ? "not started" : `${doneCount}/${selected.tasks.length} tasks · ${selPct}%`}
                 {startedLabel(selected.startDate) && <> · {startedLabel(selected.startDate)}</>}
+                {selTrackedSeconds > 0 && <> · ⏱ {formatDuration(selTrackedSeconds, false)} tracked</>}
               </div>
               <div className="pd-progressbar"><ProgressFill className="pd-progressfill" pct={selPct ?? 0} style={{ background: selColor.fg }} /></div>
 
