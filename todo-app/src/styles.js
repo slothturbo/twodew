@@ -659,7 +659,20 @@ button{touch-action:manipulation;}
 /* Wide measure: this screen now fills the window with a card grid, so it doesn't
    need the narrow reading-column cap the single-list layout used to. */
 .pd-today-col{width:100%; max-width:1500px; margin:0 auto;}
-.pd-stat-row{display:grid; grid-template-columns:repeat(auto-fit, minmax(170px,1fr)); gap:12px; margin-bottom:28px;}
+.pd-today-topline{display:flex; align-items:stretch; gap:16px; margin-bottom:28px;}
+.pd-stat-row{display:grid; grid-template-columns:repeat(auto-fit, minmax(170px,1fr)); gap:12px; flex:1;}
+/* Master focus control — the app's "::" mark as a big round start/stop button */
+.pd-focus-fab{
+  all:unset; box-sizing:border-box; flex-shrink:0; width:100px; height:100px; border-radius:50%;
+  background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center;
+  cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:28px; letter-spacing:.02em;
+  transition:transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+.pd-focus-fab:hover{transform:translateY(-2px); box-shadow:var(--shadow-md);}
+.pd-focus-fab:disabled{opacity:.4; cursor:default;}
+.pd-focus-fab:disabled:hover{transform:none; box-shadow:none;}
+.pd-focus-fab.running{background:var(--raised); color:var(--accent); box-shadow:inset 0 0 0 2px var(--accent);}
+.pd-focus-fab.running span{animation:pd-pulse 1.6s ease-in-out infinite;}
 .pd-stat-tile{
   border-radius:var(--r-lg); padding:20px 22px; border:none;
   display:flex; flex-direction:column; align-items:flex-start; text-align:left; gap:16px;
@@ -846,6 +859,8 @@ button{touch-action:manipulation;}
 /* ---- redesign: mobile overrides — kept last so they win over the base rules above ---- */
 @media (max-width: 860px){
   .pd-title{font-size:28px;}
+  .pd-today-topline{gap:10px; margin-bottom:16px;}
+  .pd-focus-fab{width:64px; height:64px; font-size:18px;}
   .pd-tabbar{
     display:flex; flex-shrink:0; justify-content:space-around; border-top:1px solid var(--line);
     background:var(--bg); padding:8px 4px max(8px, env(safe-area-inset-bottom));

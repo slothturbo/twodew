@@ -101,26 +101,40 @@ export function TodayScreen({
   const upcoming = useMemo(() => computeUpcoming(projects, inbox), [projects, inbox]);
   const [menu, setMenu] = useState(null); // { task, x, y }
 
+  // Master focus control: stops whatever's running, or — if nothing is — starts the
+  // top item on today's list, so there's always one obvious button to jump into focus.
+  const firstOpenTask = items.find((t) => !t.done);
+  const masterFocusTarget = runningTaskId || firstOpenTask?.id;
+  const focusRunning = !!runningTaskId;
+
   return (
     <div className="pd-today">
       <div className="pd-today-col">
-        <div className="pd-stat-row">
-          <div className="pd-stat-tile orange">
-            <div className="pd-stat-label">On deck</div>
-            <div className="pd-stat-value">{openCount}</div>
+        <div className="pd-today-topline">
+          <div className="pd-stat-row">
+            <div className="pd-stat-tile orange">
+              <div className="pd-stat-label">On deck</div>
+              <div className="pd-stat-value">{openCount}</div>
+            </div>
+            <div className="pd-stat-tile olive">
+              <div className="pd-stat-label">Done today</div>
+              <div className="pd-stat-value">{completedToday}</div>
+            </div>
+            <div className="pd-stat-tile lilac">
+              <div className="pd-stat-label">Streak</div>
+              <div className="pd-stat-value">{streak}d</div>
+            </div>
+            <div className="pd-stat-tile coral">
+              <div className="pd-stat-label">Focused</div>
+              <div className="pd-stat-value">{formatDuration(focusSeconds, false) || "0m"}</div>
+            </div>
           </div>
-          <div className="pd-stat-tile olive">
-            <div className="pd-stat-label">Done today</div>
-            <div className="pd-stat-value">{completedToday}</div>
-          </div>
-          <div className="pd-stat-tile lilac">
-            <div className="pd-stat-label">Streak</div>
-            <div className="pd-stat-value">{streak}d</div>
-          </div>
-          <div className="pd-stat-tile coral">
-            <div className="pd-stat-label">Focused</div>
-            <div className="pd-stat-value">{formatDuration(focusSeconds, false) || "0m"}</div>
-          </div>
+          <button type="button" className={`pd-focus-fab ${focusRunning ? "running" : ""}`}
+            disabled={!masterFocusTarget} onClick={() => masterFocusTarget && onToggleTrack(masterFocusTarget)}
+            title={focusRunning ? "Stop focus" : "Start focus on your top task"}
+            aria-label={focusRunning ? "Stop focus" : "Start focus"}>
+            <span>::</span>
+          </button>
         </div>
 
         <div className="pd-section-label">Today</div>

@@ -87,6 +87,61 @@ function migrateRoot(data) {
 /* ------------------------------------------------------------------ */
 /*  Custom themed date picker (viewport-clamped)                       */
 /* ------------------------------------------------------------------ */
+// Parses free-typed time text into "HH:MM" — accepts "8", "830", "8:3", "08:00", etc.
+// A bare hour (no minute digits at all) is completed to :00, which is the whole point:
+// native <input type="time"> can't tell JS "hour is set, minute isn't" (its .value stays
+// empty until both segments are filled), so this reimplements the field as text instead.
+function normalizeTimeInput(raw) {
+  const cleaned = (raw || "").trim();
+  if (!cleaned) return null;
+  let h, m;
+  if (cleaned.includes(":")) {
+    const [hh, mm] = cleaned.split(":");
+    h = parseInt(hh, 10);
+    m = mm.trim() === "" ? 0 : parseInt(mm, 10);
+  } else {
+    const digits = cleaned.replace(/\D/g, "");
+    if (!digits) return null;
+    if (digits.length <= 2) { h = parseInt(digits, 10); m = 0; }
+    else { h = parseInt(digits.slice(0, -2), 10); m = parseInt(digits.slice(-2), 10); }
+  }
+  if (Number.isNaN(h)) h = 0;
+  if (Number.isNaN(m)) m = 0;
+  h = Math.min(23, Math.max(0, h));
+  m = Math.min(59, Math.max(0, m));
+  return `${pad(h)}:${pad(m)}`;
+}
+// Default end time when only a start was given — treat it as a one-hour activity.
+function addHour(hhmm) {
+  const [h, m] = hhmm.split(":").map(Number);
+  const total = (h * 60 + m + 60) % (24 * 60);
+  return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
+}
+
+// Free-typed "HH:MM" field — commits (normalizing partial input) on blur or Enter,
+// rather than on every keystroke, so the user can type "8" and tab/click away or
+// press Enter and have it become "08:00" instead of being rejected mid-edit.
+function TimeField({ value, onCommit, onEnter, ariaLabel, placeholder }) {
+  const [text, setText] = useState(value || "");
+  useEffect(() => { setText(value || ""); }, [value]);
+  const commit = () => {
+    const normalized = normalizeTimeInput(text);
+    setText(normalized || "");
+    if (normalized !== value) onCommit(normalized);
+    return normalized;
+  };
+  return (
+    <input type="text" inputMode="numeric" className="pd-dp-time-input" aria-label={ariaLabel}
+      placeholder={placeholder} value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") { e.preventDefault(); const n = commit(); onEnter?.(n); e.target.blur(); }
+        else if (e.key === "Escape") { setText(value || ""); e.target.blur(); }
+      }} />
+  );
+}
+
 function DatePicker({ value, onChange, placeholder = "Set date", startTime, endTime, onStartTime, onEndTime }) {
   const showTime = !!onStartTime;
   const [open, setOpen] = useState(false);
@@ -181,11 +236,12 @@ function DatePicker({ value, onChange, placeholder = "Set date", startTime, endT
           </div>
           {showTime && value && (
             <div className="pd-dp-time-row">
-              <input type="time" className="pd-dp-time-input" value={startTime || ""} aria-label="Start time"
-                onChange={(e) => onStartTime(e.target.value || null)} />
+              <TimeField value={startTime} ariaLabel="Start time" placeholder="08:00"
+                onCommit={(v) => onStartTime(v)}
+                onEnter={(v) => { if (v && !endTime) onEndTime(addHour(v)); }} />
               <span className="pd-dp-time-sep">–</span>
-              <input type="time" className="pd-dp-time-input" value={endTime || ""} aria-label="End time"
-                onChange={(e) => onEndTime(e.target.value || null)} />
+              <TimeField value={endTime} ariaLabel="End time" placeholder="09:00"
+                onCommit={(v) => onEndTime(v)} />
             </div>
           )}
           <div className="pd-dp-foot">
@@ -310,7 +366,8 @@ function Timeline({ projects, selectedId, onSelect }) {
 /*  Task row with swipe gestures (mobile) + HTML5 drag (desktop)       */
 /* ------------------------------------------------------------------ */
 function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle, onDeadline,
-  onStartTime, onEndTime, onCyclePriority, onToggleRecurring, dragHandlers, reorderUp, reorderDown, canUp, canDown, touchReorderStart, dragClass, rkind = "task" }) {
+  onStartTime, onEndTime, onCyclePriority, onToggleRecurring, dragHandlers, reorderUp, reorderDown, canUp, canDown, touchReorderStart, dragClass, rkind = "task",
+  running, liveSeconds, onToggleTrack }) {
   const [dx, setDx] = useState(0);
   const [snap, setSnap] = useState(false);
   const start = useRef(null);
@@ -384,7 +441,7 @@ function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle
           onChange={(e) => onTitle(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.target.blur(); }} aria-label="Task title" />
         <div className="pd-task-meta">
-          {task.trackedSeconds > 0 && (
+          {!running && task.trackedSeconds > 0 && (
             <span className="pd-task-tracked" title="Time tracked on this task">⏱ {formatDuration(task.trackedSeconds, false)}</span>
           )}
           {due && <span className={`pd-task-due ${due.overdue ? "overdue" : ""}`}>{due.text}</span>}
@@ -395,6 +452,13 @@ function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle
           {!completed && onToggleRecurring && (
             <button type="button" className={`pd-recur-toggle ${task.recurring ? "on" : ""}`} title="Repeats daily"
               onClick={onToggleRecurring} aria-label={task.recurring ? "Stop repeating daily" : "Repeat daily"}>↻</button>
+          )}
+          {!completed && onToggleTrack && (
+            <button type="button" className={`pd-track-pill ${running ? "running" : ""}`} onClick={onToggleTrack}
+              aria-label={running ? "Stop tracking time" : "Start tracking time"}>
+              <span>{running ? "❙❙" : "▶"}</span>
+              {formatDuration(liveSeconds, running) && <span>{formatDuration(liveSeconds, running)}</span>}
+            </button>
           )}
           <button className="pd-x" aria-label="Delete task" onClick={onDelete}>×</button>
         </div>
@@ -1427,6 +1491,8 @@ function AppShell({ userId }) {
                       onEndTime={(v) => patchTasks((ts) => ts.map((x) => x.id === t.id ? { ...x, endTime: v } : x))}
                       onCyclePriority={() => cycleTaskPriority(t.id)}
                       onToggleRecurring={() => toggleTaskRecurring(t.id)}
+                      running={runningTaskId === t.id} liveSeconds={liveTaskSeconds(t, runningTaskId, runStart)}
+                      onToggleTrack={() => toggleTrack(t.id)}
                       reorderUp={() => patchTasks((ts) => moveBy(ts, t.id, -1))}
                       reorderDown={() => patchTasks((ts) => moveBy(ts, t.id, 1))}
                       canUp={activeTasks[0]?.id !== t.id}
