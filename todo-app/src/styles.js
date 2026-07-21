@@ -45,6 +45,10 @@ export const css = `
 input, textarea, select, [contenteditable], .pd-bubble-content{
   user-select:text; -webkit-user-select:text;
 }
+/* House style: every bit of text in the app renders lowercase, including labels that
+   are deliberately uppercase elsewhere in this stylesheet (section labels, phase tags,
+   field labels) — !important wins over those so this one rule covers all of them. */
+.pd-app, .pd-app *{text-transform:lowercase !important;}
 ::selection{background:var(--accent); color:var(--accent-ink);}
 ::placeholder{color:var(--muted); opacity:.7;}
 button{touch-action:manipulation;}
@@ -683,6 +687,8 @@ button{touch-action:manipulation;}
   font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:14px;
 }
 .pd-today-card-count{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); flex-shrink:0;}
+.pd-today-card-name-link{cursor:pointer;}
+.pd-today-card-name-link:hover{text-decoration:underline;}
 .pd-today-card .pd-today-row:last-child{border-bottom:none;}
 
 .pd-today-list{list-style:none;}

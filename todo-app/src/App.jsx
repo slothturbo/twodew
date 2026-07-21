@@ -1197,7 +1197,9 @@ function AppShell({ userId }) {
               </>
             ) : (
               <>
-                <div className="pd-title">{screen === "today" ? greeting : SCREEN_TITLES[screen]}<span>.</span></div>
+                <div className="pd-title">
+                  {screen === "today" ? greeting : <>{SCREEN_TITLES[screen]}<span>.</span></>}
+                </div>
                 <div className="pd-topbar-quickadd-wrap">
                   <input className="pd-topbar-quickadd" placeholder='Add a task…  try "call mom tomorrow 5pm"'
                     value={inboxInput} onChange={(e) => setInboxInput(e.target.value)}

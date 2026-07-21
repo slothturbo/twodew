@@ -32,36 +32,44 @@ export function useKeyboardInset() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Greeting hook — timezone-aware greetings for Today screen         */
-/*  Returns: greeting string - based on user's local time              */
+/*  Greeting hook — time-of-day vibe lines for the Today screen        */
+/*  Picks one of a few sets per calendar day (stable across reloads    */
+/*  within a day, rotates on a new day) so it stays varied without     */
+/*  flip-flopping mid-session.                                         */
 /* ------------------------------------------------------------------ */
+const GREETING_SETS = [
+  { morning: "look alive, sunshine.", afternoon: "survive the midday sun.", night: "here comes the night owl." },
+  { morning: "drop the needle, radioactive.", afternoon: "burn through the wasteland.", night: "prowl the neon, night owl." },
+  { morning: "wake up, killjoys.", afternoon: "choke on the exhaust.", night: "flutter your wings, night owl." },
+];
+
+function pickSetForDate(dateStr) {
+  let hash = 0;
+  for (let i = 0; i < dateStr.length; i++) hash = (hash * 31 + dateStr.charCodeAt(i)) >>> 0;
+  return GREETING_SETS[hash % GREETING_SETS.length];
+}
+function periodForHour(hour) {
+  if (hour >= 5 && hour < 12) return "morning";
+  if (hour >= 12 && hour < 18) return "afternoon";
+  return "night";
+}
+function greetingFor(date) {
+  const dateStr = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  return pickSetForDate(dateStr)[periodForHour(date.getHours())];
+}
+
 export function useGreeting() {
-  const [greeting, setGreeting] = useState(() => {
-    const h = new Date().getHours();
-    return getGreetingForHour(h);
-  });
+  const [greeting, setGreeting] = useState(() => greetingFor(new Date()));
 
   useEffect(() => {
-    const updateGreeting = () => {
-      const h = new Date().getHours();
-      setGreeting(getGreetingForHour(h));
-    };
-    // Check every minute for time changes (handles timezone shifts, day changes)
+    const updateGreeting = () => setGreeting(greetingFor(new Date()));
+    // Check every minute for time-of-day/date changes
     const interval = setInterval(updateGreeting, 60000);
     updateGreeting(); // Run immediately on mount/change
     return () => clearInterval(interval);
   }, []);
 
   return greeting;
-}
-
-// Helper: returns the appropriate greeting string based on hour (local time, timezone-aware)
-// Time periods match user preference: morning 6-14, afternoon 13-18, evening 19-22, night otherwise
-function getGreetingForHour(hour) {
-  if (hour >= 6 && hour < 14) return "Good morning";
-  if (hour >= 13 && hour < 18) return "Good afternoon";
-  if (hour >= 19 && hour < 22) return "Welcome back";
-  return "Hello, night owl";
 }
 
 // Local development monitor hook - monitors localhost build performance

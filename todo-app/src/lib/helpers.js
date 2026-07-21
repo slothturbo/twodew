@@ -200,7 +200,7 @@ export function groupTodayByProject(items) {
   for (const t of items) {
     const key = t.projectId || "inbox";
     if (!groups.has(key)) {
-      groups.set(key, { key, name: t.projectName || "Inbox", color: t.projectColor, tasks: [] });
+      groups.set(key, { key, name: t.projectName || "Tasks", color: t.projectColor, tasks: [] });
     }
     groups.get(key).tasks.push(t);
   }

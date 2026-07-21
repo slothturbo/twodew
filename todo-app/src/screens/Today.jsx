@@ -132,7 +132,11 @@ export function TodayScreen({
               <div key={g.key} className="pd-today-card">
                 <div className="pd-today-card-head">
                   <span className="pd-today-card-dot" style={{ background: g.color ? g.color.fg : "var(--muted)" }} />
-                  <span className="pd-today-card-name">{g.name}</span>
+                  {g.key === "inbox" ? (
+                    <span className="pd-today-card-name">{g.name}</span>
+                  ) : (
+                    <span className="pd-today-card-name pd-today-card-name-link" onClick={() => onOpenProject(g.key)}>{g.name}</span>
+                  )}
                   <span className="pd-today-card-count">{g.tasks.filter((t) => t.done).length}/{g.tasks.length}</span>
                 </div>
                 <ul className="pd-today-list">
