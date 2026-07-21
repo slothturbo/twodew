@@ -167,7 +167,9 @@ export function Bubble({ note, color, isMobile, onSave, onDelete, dragProps, tou
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => { e.stopPropagation(); touchReorderStart?.(e, note.id, "note"); }}>⠿</span>
         )}
-        <div className={`pd-bubble-content ${isLong ? "clamped" : ""}`} dangerouslySetInnerHTML={{ __html: note.text }} />
+        {/* Sanitized again here, not just on save — note.text can also arrive via
+            realtime sync or import, neither of which is "saving through this editor". */}
+        <div className={`pd-bubble-content ${isLong ? "clamped" : ""}`} dangerouslySetInnerHTML={{ __html: sanitizeHtml(note.text) }} />
         <button className="pd-x" aria-label="Delete note" onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); onDelete(); }}>×</button>
       </div>

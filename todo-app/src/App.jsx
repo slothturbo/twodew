@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { storage } from "./lib/storage";
+import { mergeWorkspace } from "./lib/merge";
 import { supabase } from "./supabaseClient";
 import { css } from "./styles";
-import { textToHtml, htmlToPlain, imageFileToDataURL } from "./lib/html";
+import { textToHtml, htmlToPlain, imageFileToDataURL, sanitizeHtml } from "./lib/html";
 import { useIsMobile, useKeyboardInset, useGreeting } from "./lib/hooks";
 import { Ring, ProgressFill } from "./components/Ring";
 import { Bubble } from "./components/Bubble";
 import { CommandPalette } from "./components/CommandPalette";
 import { Sidebar } from "./components/Sidebar";
+import { SyncStatus } from "./components/SyncStatus";
 import { TodayScreen } from "./screens/Today";
 import { CalendarScreen } from "./screens/Calendar";
 import { BrainScreen } from "./screens/BrainScreen";
@@ -23,6 +25,47 @@ import {
 /*  v8 — native-feel: fixed shell, swipes, undo, FAB, bottom sheet     */
 /* ------------------------------------------------------------------ */
 const STORAGE_KEY = "projects-data-v1";
+// Same-device recovery cache — lets a reload/offline load recover an edit that was
+// made but never confirmed written to Supabase (tab closed mid-save, network down).
+const CACHE_KEY = "twodew-cache-v1";
+function readCache(userId) {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed.userId !== userId) return null;
+    return parsed; // { userId, blob, synced, cachedAt }
+  } catch (e) { return null; }
+}
+function writeCache(userId, blob, synced) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ userId, blob, synced, cachedAt: Date.now() })); } catch (e) { /* storage full/unavailable — cache is best-effort */ }
+}
+// A one-off snapshot taken right before a "Replace" import — separate from CACHE_KEY
+// so an import undo can never be confused with the ordinary sync recovery copy.
+const PRE_IMPORT_CACHE_KEY = "twodew-pre-import-snapshot";
+
+const isPlainObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+// Structural validation for an imported file — catches a corrupted/wrong-shaped file
+// before anything derived from it touches app state. Not full schema validation of
+// every field, just enough to refuse the shapes that would otherwise crash migrate().
+function validateImportShape(parsed) {
+  if (!isPlainObject(parsed)) return "That file doesn't look like a projects-export .json file.";
+  for (const f of ["projects", "inbox", "notes"]) {
+    if (parsed[f] !== undefined && !Array.isArray(parsed[f])) return `"${f}" should be a list in that file — it looks corrupted.`;
+  }
+  for (const f of ["completionLog", "focusLog"]) {
+    if (parsed[f] !== undefined && !isPlainObject(parsed[f])) return `"${f}" should be a set of dates in that file — it looks corrupted.`;
+  }
+  for (const p of parsed.projects || []) {
+    if (!isPlainObject(p) || typeof p.id !== "string" || typeof p.name !== "string") return "One of the projects in that file is missing required fields.";
+  }
+  for (const f of ["inbox", "notes"]) {
+    for (const item of parsed[f] || []) {
+      if (!isPlainObject(item) || typeof item.id !== "string") return `One of the items in "${f}" is missing an id.`;
+    }
+  }
+  return null;
+}
 const OLD_HUES = ["#2E6BE6", "#0E8A7B", "#7A4FBF", "#C77D0A", "#C74A6B", "#3D7A2E"];
 const INBOX_COLOR = { fg: "var(--muted)", bg: "rgba(140,150,163,0.12)" };
 const NAV_ITEMS = [
@@ -55,7 +98,10 @@ function migrate(p, i) {
   const out = { ...p };
   if (typeof out.notes === "string") out.notes = out.notes.trim() ? [{ id: uid(), text: out.notes.trim() }] : [];
   if (!Array.isArray(out.notes)) out.notes = [];
-  out.notes = out.notes.map((n) => ({ ...n, text: /<[a-z]/i.test(n.text) ? n.text : textToHtml(n.text) }));
+  // Always run through sanitizeHtml as the final step, even for content that already
+  // looks like HTML — that "already HTML" case used to skip sanitization entirely,
+  // which is exactly the gap an imported/tampered note could exploit.
+  out.notes = out.notes.map((n) => ({ ...n, text: sanitizeHtml(/<[a-z]/i.test(n.text) ? n.text : textToHtml(n.text)) }));
   if (!out.startDate) out.startDate = new Date(out.createdAt || Date.now()).toISOString().slice(0, 10);
   if (out.client === undefined) out.client = "";
   if (out.location === undefined) out.location = "";
@@ -74,12 +120,33 @@ function migrate(p, i) {
 function migrateRoot(data) {
   return {
     inbox: (data.inbox || []).map(migrateTask),
-    notes: data.notes || [], // standalone notes, not tied to any project — same {id, text} shape as project.notes
+    // Standalone notes, not tied to any project — same {id, text} shape as project.notes,
+    // and sanitized the same way (see migrate() above) for the same reason.
+    notes: (data.notes || []).map((n) => ({ ...n, text: sanitizeHtml(/<[a-z]/i.test(n.text) ? n.text : textToHtml(n.text)) })),
     completionLog: data.completionLog || {},
     focusLog: data.focusLog || {},
     lastResetDate: data.lastResetDate || todayISO(),
     runningTaskId: data.runningTaskId || null,
     runStart: data.runStart || null,
+  };
+}
+
+// Normalizes a raw blob (Supabase's shape, or a persisted snapshot) into the same
+// shape live app state is kept in — so a remote update can be compared/merged against
+// current local state field-for-field. migrate()/migrateTask() are idempotent, so this
+// is also safe to call on already-migrated data.
+function toWorkspace(data) {
+  const root = migrateRoot(data);
+  return {
+    projects: (data.projects || []).map(migrate),
+    inbox: root.inbox,
+    notes: root.notes,
+    completionLog: root.completionLog,
+    focusLog: root.focusLog,
+    lastResetDate: root.lastResetDate,
+    runningTaskId: root.runningTaskId,
+    runStart: root.runStart,
+    lastSelectedId: data.lastSelectedId || null,
   };
 }
 
@@ -551,7 +618,9 @@ function AppShell({ userId }) {
   const [newProj, setNewProj] = useState({ name: "", client: "", location: "", startDate: todayISO() });
   const [taskInput, setTaskInput] = useState("");
   const [noiseInput, setNoiseInput] = useState("");
-  const [savedFlash, setSavedFlash] = useState("");
+  const [syncState, setSyncState] = useState("saved"); // 'saving' | 'saved' | 'offline' | 'conflict'
+  const [syncNote, setSyncNote] = useState("");
+  const [syncConflicts, setSyncConflicts] = useState([]);
   const [view, setView] = useState("list");
   const [query, setQuery] = useState("");
   const [pendingImport, setPendingImport] = useState(null);
@@ -605,7 +674,6 @@ function AppShell({ userId }) {
 
   const kbInset = useKeyboardInset();
   const saveTimer = useRef(null);
-  const flashTimer = useRef(null);
   const toastTimer = useRef(null);
   const importFileRef = useRef(null);
   const searchRef = useRef(null);
@@ -615,6 +683,11 @@ function AppShell({ userId }) {
   const tickTimer = useRef(null);
   const lastWrittenAtRef = useRef(null);
   const pendingWriteRef = useRef(false);
+  // Workspace shape as of the last point local and the server were known to agree —
+  // the 3-way merge base. Updated only at sync boundaries (see applyData/attemptWrite),
+  // never mid-edit.
+  const syncBaseRef = useRef(null);
+  const syncConflictsRef = useRef([]); syncConflictsRef.current = syncConflicts;
   selectedIdRef.current = selectedId;
 
   // Mirror the redesign's root-level state into refs so the debounced persist() below
@@ -654,11 +727,82 @@ function AppShell({ userId }) {
       setRunStart(null); runStartRef.current = null;
       clearInterval(tickTimer.current);
     }
+    // Local now matches `data` exactly — this is a fresh sync boundary.
+    syncBaseRef.current = toWorkspace(data);
   }, []);
+
+  /* ---- debounced save (whole root blob: projects, inbox, logs, timer, last selected) ----
+     Defined before the load effect below so a recovered-but-unsynced cache can call it
+     directly to push itself back to the server.
+     `attemptWrite` always sends whatever's in `pendingBlobRef` — not a value captured at
+     call time — so the 20s offline retry loop and the `online` listener both naturally
+     pick up further edits made while still offline, instead of replaying a stale blob. */
+  const pendingBlobRef = useRef(null);
+  const offlineRetryTimer = useRef(null);
+
+  const attemptWrite = useCallback(async () => {
+    const blob = pendingBlobRef.current;
+    if (!blob) return;
+    try {
+      const res = await storage.set(STORAGE_KEY, blob);
+      if (res?.updatedAt) lastWrittenAtRef.current = res.updatedAt;
+      writeCache(userId, blob, true);
+      setSyncNote(blob.length > 2_500_000 ? "data is getting large — consider removing old brain entries" : "");
+      setSyncState("saved");
+      pendingWriteRef.current = false;
+      pendingBlobRef.current = null;
+      // Server now matches what we just sent — fresh sync boundary for the merge base.
+      syncBaseRef.current = JSON.parse(blob);
+      if (offlineRetryTimer.current) { clearInterval(offlineRetryTimer.current); offlineRetryTimer.current = null; }
+    } catch (e) {
+      setSyncState("offline");
+      // pendingWriteRef/pendingBlobRef deliberately stay set — there's still an
+      // unconfirmed write outstanding. Poll in case the browser's `online` event
+      // doesn't fire reliably (true on some mobile browsers behind captive portals).
+      if (!offlineRetryTimer.current) offlineRetryTimer.current = setInterval(attemptWrite, 20000);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    window.addEventListener("online", attemptWrite);
+    return () => { window.removeEventListener("online", attemptWrite); clearInterval(offlineRetryTimer.current); };
+  }, [attemptWrite]);
+
+  // The "local" side of a merge, and what persist() below serializes — refs, so it's
+  // always the latest values regardless of which piece of state triggered the save.
+  const buildSnapshot = useCallback(() => ({
+    projects: projectsRef.current,
+    inbox: inboxRef.current,
+    notes: notesRef.current,
+    completionLog: completionLogRef.current,
+    focusLog: focusLogRef.current,
+    lastResetDate: lastResetDateRef.current,
+    runningTaskId: runningTaskIdRef.current,
+    runStart: runStartRef.current,
+    lastSelectedId: selectedIdRef.current,
+  }), []);
+
+  const persist = useCallback(() => {
+    clearTimeout(saveTimer.current);
+    // Marked immediately (not just once the timeout fires) so a realtime event landing
+    // anywhere in the debounce window — before this change has actually reached the DB —
+    // can't overwrite it via applyData() and get silently persisted over on the next save.
+    pendingWriteRef.current = true;
+    setSyncState("saving");
+    saveTimer.current = setTimeout(() => {
+      const blob = JSON.stringify(buildSnapshot());
+      pendingBlobRef.current = blob;
+      // Written before the network call, not after — so a tab close/crash mid-save still
+      // leaves a same-device recovery copy on disk, marked unsynced until it's confirmed.
+      writeCache(userId, blob, false);
+      attemptWrite();
+    }, 500);
+  }, [userId, attemptWrite, buildSnapshot]);
 
   /* ---- load ---- */
   useEffect(() => {
     (async () => {
+      let usedCache = false;
       try {
         const res = await storage.get(STORAGE_KEY);
         if (res && res.value) {
@@ -667,11 +811,28 @@ function AppShell({ userId }) {
           const today = todayISO();
           setLastResetDate(today); lastResetDateRef.current = today;
         }
-      } catch (e) { /* first run */ }
+      } catch (e) {
+        // A real request failure (offline, Supabase unreachable) — not "no data yet",
+        // storage.get() only returns null for that case. Fall back to this device's
+        // own last-known copy instead of rendering an empty workspace.
+        const cached = readCache(userId);
+        if (cached) { applyData(JSON.parse(cached.blob), { restoreSelection: true }); usedCache = true; }
+        setSyncState("offline");
+      }
+      // Whether or not the server load succeeded, check for an edit from a previous
+      // session that never got confirmed written (closed the tab mid-save) — the cache
+      // is written before the network call in persist(), so this is how it survives.
+      if (!usedCache) {
+        const cached = readCache(userId);
+        if (cached && !cached.synced) {
+          applyData(JSON.parse(cached.blob), { restoreSelection: true });
+          persist();
+        }
+      }
       setLoaded(true);
     })();
     return () => clearInterval(tickTimer.current);
-  }, [applyData]);
+  }, [applyData, persist, userId]);
 
   /* ---- live sync: pick up changes made on another device within ~1s ---- */
   useEffect(() => {
@@ -684,58 +845,37 @@ function AppShell({ userId }) {
         (payload) => {
           const row = payload.new;
           if (!row || row.key !== STORAGE_KEY) return;
-          // Skip while a local change hasn't reached the DB yet — applying a remote
-          // snapshot here would silently overwrite/lose the pending edit, since the
-          // debounced persist() below would then save from refs we just clobbered.
-          if (pendingWriteRef.current) return;
           // Skip our own write echoing back (compare numerically — Postgres may
           // reformat the timestamp string even though it's the same instant).
           if (lastWrittenAtRef.current && new Date(row.updated_at).getTime() <= new Date(lastWrittenAtRef.current).getTime()) return;
+
+          if (pendingWriteRef.current) {
+            // A local write hasn't reached the DB yet. Merge the incoming remote
+            // change against the last known-agreed base instead of dropping it —
+            // otherwise the pending local write would land moments later and
+            // silently overwrite whatever this other device just did.
+            const base = syncBaseRef.current || buildSnapshot();
+            const { merged, conflicts } = mergeWorkspace(base, buildSnapshot(), toWorkspace(row.value));
+            applyData(merged);
+            if (conflicts.length) {
+              setSyncConflicts((cs) => {
+                const byKey = new Map(cs.map((c) => [`${c.type}:${c.id}`, c]));
+                for (const c of conflicts) byKey.set(`${c.type}:${c.id}`, c);
+                return [...byKey.values()];
+              });
+              setSyncState("conflict");
+            }
+            persist(); // push the merged result so both devices converge
+            return;
+          }
+
           applyData(row.value);
-          setSavedFlash("synced from another device");
-          clearTimeout(flashTimer.current);
-          flashTimer.current = setTimeout(() => setSavedFlash(""), 2000);
+          setSyncState(syncConflictsRef.current.length ? "conflict" : "saved");
         }
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [loaded, userId, applyData]);
-
-  /* ---- debounced save (whole root blob: projects, inbox, logs, timer, last selected) ---- */
-  const persist = useCallback(() => {
-    clearTimeout(saveTimer.current);
-    // Marked immediately (not just once the timeout fires) so a realtime event landing
-    // anywhere in the debounce window — before this change has actually reached the DB —
-    // can't overwrite it via applyData() and get silently persisted over on the next save.
-    pendingWriteRef.current = true;
-    saveTimer.current = setTimeout(async () => {
-      try {
-        const blob = JSON.stringify({
-          projects: projectsRef.current,
-          inbox: inboxRef.current,
-          notes: notesRef.current,
-          completionLog: completionLogRef.current,
-          focusLog: focusLogRef.current,
-          lastResetDate: lastResetDateRef.current,
-          runningTaskId: runningTaskIdRef.current,
-          runStart: runStartRef.current,
-          lastSelectedId: selectedIdRef.current,
-        });
-        const res = await storage.set(STORAGE_KEY, blob);
-        if (res?.updatedAt) lastWrittenAtRef.current = res.updatedAt;
-        clearTimeout(flashTimer.current);
-        if (blob.length > 2_500_000) {
-          // Inline images are the usual culprit — surface it before saves get sluggish.
-          setSavedFlash("saved — data is getting large; consider removing old brain entries");
-          flashTimer.current = setTimeout(() => setSavedFlash(""), 5000);
-        } else {
-          setSavedFlash("saved");
-          flashTimer.current = setTimeout(() => setSavedFlash(""), 1200);
-        }
-      } catch (e) { setSavedFlash("save failed — will retry on next change"); }
-      finally { pendingWriteRef.current = false; }
-    }, 500);
-  }, []);
+  }, [loaded, userId, applyData, buildSnapshot, persist]);
 
   const update = useCallback((fn) => {
     setProjects((prev) => { const next = fn(prev); projectsRef.current = next; persist(); return next; });
@@ -1022,6 +1162,31 @@ function AppShell({ userId }) {
       return { ...p, tasks: ts };
     })));
   };
+  // Sync-conflict recovery: "keep mine" is the default (a no-op — local already won
+  // the merge), "use theirs" applies the other device's version of that one item.
+  const resolveConflict = (conflict, choice) => {
+    if (choice === "remote") {
+      if (conflict.type === "task") {
+        if (conflict.remote) {
+          locateAndPatchTask(conflict.id, () => conflict.remote);
+        } else {
+          const found = inboxRef.current.find((t) => t.id === conflict.id)
+            || projectsRef.current.flatMap((p) => p.tasks).find((t) => t.id === conflict.id);
+          if (found) deleteAnyTaskWithUndo(found);
+        }
+      } else if (conflict.type === "project") {
+        if (conflict.remote) update((prev) => prev.map((p) => (p.id === conflict.id ? { ...p, ...conflict.remote } : p)));
+        else update((prev) => prev.filter((p) => p.id !== conflict.id));
+      } else if (conflict.type === "note") {
+        const patchNotes = (ns) => (conflict.remote
+          ? (ns.some((n) => n.id === conflict.id) ? ns.map((n) => (n.id === conflict.id ? conflict.remote : n)) : ns)
+          : ns.filter((n) => n.id !== conflict.id));
+        updateNotes(patchNotes);
+        update((prev) => prev.map((p) => ({ ...p, notes: patchNotes(p.notes) })));
+      }
+    }
+    setSyncConflicts((cs) => cs.filter((x) => !(x.type === conflict.type && x.id === conflict.id)));
+  };
   const deleteNoteWithUndo = (note) => {
     const projId = selected.id;
     const idx = selected.notes.findIndex((n) => n.id === note.id);
@@ -1082,7 +1247,15 @@ function AppShell({ userId }) {
 
   /* ---- export / import ---- */
   const exportData = () => {
-    const blob = new Blob([JSON.stringify({ projects, inbox, notes }, null, 2)], { type: "application/json" });
+    // A complete backup: every persisted field except the running-timer state, which
+    // is deliberately left out — resuming a stale timer from an old backup would be
+    // actively wrong, not useful, if it were ever restored hours or days later.
+    const payload = {
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      projects, inbox, notes, completionLog, focusLog, lastResetDate,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `projects-export-${todayISO()}.json`;
@@ -1097,10 +1270,15 @@ function AppShell({ userId }) {
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
+      const shapeError = validateImportShape(parsed);
+      if (shapeError) { setImportNote(shapeError); return; }
       const incoming = {
         projects: (parsed.projects || []).map(migrate),
         inbox: (parsed.inbox || []).map(migrateTask),
-        notes: parsed.notes || [],
+        notes: (parsed.notes || []).map((n) => ({ ...n, text: sanitizeHtml(/<[a-z]/i.test(n.text) ? n.text : textToHtml(n.text)) })),
+        completionLog: parsed.completionLog || {},
+        focusLog: parsed.focusLog || {},
+        lastResetDate: typeof parsed.lastResetDate === "string" ? parsed.lastResetDate : null,
       };
       if (!incoming.projects.length && !incoming.inbox.length && !incoming.notes.length) {
         setImportNote("That file has no projects, tasks, or notes in it."); return;
@@ -1111,14 +1289,62 @@ function AppShell({ userId }) {
     }
   };
   const confirmImport = () => {
+    if (!pendingImport) return;
+    // A recovery snapshot of what's about to be replaced — both a durable copy (in case
+    // the tab closes before the undo toast is used) and the value the toast's undo
+    // button applies directly, so undoing doesn't require a reload.
+    const preSnapshot = buildSnapshot();
+    try { localStorage.setItem(PRE_IMPORT_CACHE_KEY, JSON.stringify({ userId, snapshot: preSnapshot, savedAt: Date.now() })); } catch (e) { /* best-effort */ }
+
     const n = pendingImport.projects.length;
     update(() => pendingImport.projects);
     updateInbox(() => pendingImport.inbox);
     updateNotes(() => pendingImport.notes);
+    setCompletionLog(pendingImport.completionLog); completionLogRef.current = pendingImport.completionLog;
+    setFocusLog(pendingImport.focusLog); focusLogRef.current = pendingImport.focusLog;
+    if (pendingImport.lastResetDate) { setLastResetDate(pendingImport.lastResetDate); lastResetDateRef.current = pendingImport.lastResetDate; }
+    // A running timer that points at a task the import just replaced would be pointing
+    // at nothing — clear it rather than leave a dangling reference.
+    const stillExists = pendingImport.inbox.some((t) => t.id === runningTaskIdRef.current)
+      || pendingImport.projects.some((p) => p.tasks.some((t) => t.id === runningTaskIdRef.current));
+    if (runningTaskIdRef.current && !stillExists) {
+      setRunningTaskId(null); runningTaskIdRef.current = null;
+      setRunStart(null); runStartRef.current = null;
+      clearInterval(tickTimer.current);
+    }
+    persist();
     setSelectedId(null);
     setPendingImport(null);
-    setImportNote(`Imported ${n} project${n !== 1 ? "s" : ""}.`);
-    setTimeout(() => setImportNote(""), 3000);
+    setImportNote("");
+    showUndo(`Replaced with ${n} imported project${n !== 1 ? "s" : ""}`, () => applyData(preSnapshot, { restoreSelection: true }));
+  };
+  const mergeImportData = () => {
+    if (!pendingImport) return;
+    const existingProjectIds = new Set(projectsRef.current.map((p) => p.id));
+    const newProjects = pendingImport.projects.filter((p) => !existingProjectIds.has(p.id));
+    if (newProjects.length) update((prev) => [...prev, ...newProjects]);
+
+    const existingInboxIds = new Set(inboxRef.current.map((t) => t.id));
+    const newInboxTasks = pendingImport.inbox.filter((t) => !existingInboxIds.has(t.id));
+    if (newInboxTasks.length) updateInbox((ts) => [...ts, ...newInboxTasks]);
+
+    const existingNoteIds = new Set(notesRef.current.map((n) => n.id));
+    const newNotes = pendingImport.notes.filter((n) => !existingNoteIds.has(n.id));
+    if (newNotes.length) updateNotes((ns) => [...ns, ...newNotes]);
+
+    // The imported file's logs are treated as independent history added on top of the
+    // current counts (same delta-sum spirit as the realtime merge), not a snapshot
+    // that replaces today's numbers — an existing local id always wins on collision,
+    // so merging can never silently overwrite live data.
+    Object.entries(pendingImport.completionLog || {}).forEach(([date, count]) => { if (count) bumpCompletionLog(date, count); });
+    Object.entries(pendingImport.focusLog || {}).forEach(([date, seconds]) => { if (seconds) bumpFocusLog(date, seconds); });
+
+    const addedCount = newProjects.length + newInboxTasks.length + newNotes.length;
+    setPendingImport(null);
+    setImportNote(addedCount
+      ? `Merged in ${addedCount} new item${addedCount !== 1 ? "s" : ""}.`
+      : "Nothing new to merge — everything in that file already exists here.");
+    setTimeout(() => setImportNote(""), 4000);
   };
 
   /* ---- touch reorder (long list drag via handle, works on phones) ---- */
@@ -1233,6 +1459,10 @@ function AppShell({ userId }) {
   return (
     <div className={`pd-app ${selected ? "detail-open" : ""}`}>
       <style>{css}</style>
+      {loaded && (
+        <SyncStatus state={syncState} note={syncNote} conflicts={syncConflicts}
+          onResolveConflict={(c) => resolveConflict(c, "remote")} />
+      )}
 
       <div className="pd-shell">
         {!isMobile && (
@@ -1332,7 +1562,6 @@ function AppShell({ userId }) {
                     ))}
                   </ul>
                 )}
-                <div className="pd-saved">{savedFlash}</div>
                 <div style={{ height: isMobile ? 24 : 0 }} />
               </div>
             )}
@@ -1371,9 +1600,16 @@ function AppShell({ userId }) {
           {importNote && <div className={`pd-import-note ${pendingImport ? "" : "err"}`}>{importNote}</div>}
           {pendingImport && (
             <div className="pd-import-banner">
-              <p>Import {pendingImport.projects.length} project{pendingImport.projects.length !== 1 ? "s" : ""}? This replaces everything currently in this app.</p>
+              <p>
+                That file has {pendingImport.projects.length} project{pendingImport.projects.length !== 1 ? "s" : ""},{" "}
+                {pendingImport.inbox.length} inbox task{pendingImport.inbox.length !== 1 ? "s" : ""}, and{" "}
+                {pendingImport.notes.length} note{pendingImport.notes.length !== 1 ? "s" : ""}. Replace swaps in everything
+                from the file (your current data is saved locally first, so it's undoable); merge only adds what isn't
+                already here, without touching anything that exists.
+              </p>
               <div className="pd-form-row">
                 <button className="pd-btn" onClick={confirmImport}>Replace with imported data</button>
+                <button className="pd-btn" onClick={mergeImportData}>Merge into current data</button>
                 <button className="pd-btn ghost" onClick={() => setPendingImport(null)}>Cancel</button>
               </div>
             </div>
@@ -1558,7 +1794,6 @@ function AppShell({ userId }) {
                   ))}
                 </div>
               )}
-              <div className="pd-saved">{savedFlash}</div>
               <div style={{ height: isMobile ? 24 : 0 }} />
             </>
           )}

@@ -438,7 +438,39 @@ button{touch-action:manipulation;}
   padding:9px 12px; font-size:12px; cursor:pointer; font-family:'IBM Plex Mono',monospace;
 }
 .pd-danger-btn:hover{border-color:var(--danger); color:var(--danger);}
-.pd-saved{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); margin-top:6px; min-height:14px;}
+/* Sync status pill — fixed corner, visible on every screen, replaces the old fading
+   "saved" toast so Saving/Saved/Offline/Conflict is always legible, not just after the fact. */
+.pd-sync-wrap{position:fixed; right:16px; bottom:16px; z-index:70;}
+.pd-sync-pill{
+  all:unset; box-sizing:border-box; display:flex; align-items:center; gap:6px;
+  background:var(--raised); border:1px solid var(--line); border-radius:999px; padding:7px 13px;
+  font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); cursor:default;
+  box-shadow:var(--shadow-sm);
+}
+.pd-sync-dot{width:6px; height:6px; border-radius:50%; background:var(--muted); flex-shrink:0;}
+.pd-sync-pill.saving .pd-sync-dot{background:var(--accent); animation:pd-pulse 1.2s ease-in-out infinite;}
+.pd-sync-pill.saved .pd-sync-dot{background:var(--ok);}
+.pd-sync-pill.offline .pd-sync-dot{background:var(--priority-high);}
+.pd-sync-pill.offline{color:var(--priority-high);}
+.pd-sync-pill.conflict{cursor:pointer; border-color:var(--danger); color:var(--danger);}
+.pd-sync-pill.conflict .pd-sync-dot{background:var(--danger);}
+.pd-sync-panel{
+  position:absolute; bottom:calc(100% + 8px); right:0; width:280px; max-height:360px; overflow-y:auto;
+  background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg);
+  box-shadow:var(--shadow-lg); padding:12px; animation:pd-in .15s ease;
+}
+.pd-sync-panel-head{display:flex; align-items:center; justify-content:space-between; font-weight:700; font-size:13px; margin-bottom:6px;}
+.pd-sync-panel-head button{all:unset; cursor:pointer; color:var(--muted); padding:4px;}
+.pd-sync-panel-hint{font-size:11px; color:var(--muted); margin-bottom:10px; line-height:1.4;}
+.pd-sync-conflict-list{list-style:none; display:flex; flex-direction:column; gap:8px;}
+.pd-sync-conflict-row{border-top:1px solid var(--line); padding-top:8px;}
+.pd-sync-conflict-title{font-size:13px; margin-bottom:6px;}
+.pd-sync-conflict-actions{display:flex; gap:6px;}
+.pd-sync-conflict-btn{
+  all:unset; box-sizing:border-box; font-size:11px; padding:5px 8px; border-radius:6px;
+  border:1px solid var(--line); cursor:pointer; color:var(--muted);
+}
+.pd-sync-conflict-btn:hover, .pd-sync-conflict-btn.active{border-color:var(--accent); color:var(--accent);}
 .pd-form{background:var(--card); border:1px solid var(--accent); border-radius:12px; padding:14px; margin-bottom:10px;}
 .pd-form input[type=text]{
   width:100%; padding:10px 11px; font-size:14px; border:1px solid var(--line); border-radius:8px;
@@ -863,6 +895,8 @@ button{touch-action:manipulation;}
   .pd-title{font-size:28px;}
   .pd-today-topline{gap:10px; margin-bottom:16px;}
   .pd-focus-fab{width:64px; height:64px; font-size:18px;}
+  .pd-sync-wrap{right:10px; bottom:calc(64px + env(safe-area-inset-bottom));}
+  .pd-sync-pill{padding:6px 10px; font-size:10px;}
   .pd-tabbar{
     display:flex; flex-shrink:0; justify-content:space-around; border-top:1px solid var(--line);
     background:var(--bg); padding:8px 4px max(8px, env(safe-area-inset-bottom));

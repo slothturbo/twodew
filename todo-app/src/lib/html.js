@@ -7,8 +7,12 @@ export function textToHtml(text) {
 }
 export function sanitizeHtml(html) {
   const allowed = /^(B|STRONG|I|EM|U|S|STRIKE|BR|DIV|SPAN|H2|H3|H4|PRE|UL|LI|OL|IMG|P)$/;
-  const tmp = document.createElement("div");
-  tmp.innerHTML = html;
+  // Parsed via DOMParser, not `element.innerHTML =` on a live document — a detached
+  // <div> is still part of the active document, so setting its innerHTML directly
+  // loads images and fires their onerror/onload handlers *during parsing*, before
+  // this function ever gets a chance to strip them. A DOMParser document has no
+  // browsing context, so nothing in it loads or executes, ever.
+  const tmp = new DOMParser().parseFromString(html, "text/html").body;
   const walk = (node) => {
     [...node.childNodes].forEach((child) => {
       if (child.nodeType === 1) {
@@ -32,8 +36,9 @@ export function sanitizeHtml(html) {
   return tmp.innerHTML;
 }
 export function htmlToPlain(html) {
-  const tmp = document.createElement("div");
-  tmp.innerHTML = html;
+  // Same DOMParser reasoning as sanitizeHtml above — this runs on note content that
+  // isn't guaranteed to have passed through sanitizeHtml yet at every call site.
+  const tmp = new DOMParser().parseFromString(html, "text/html").body;
   return tmp.textContent || "";
 }
 export function imageFileToDataURL(file) {
