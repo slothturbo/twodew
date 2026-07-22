@@ -113,12 +113,14 @@ export function mergeWorkspace(base, local, remote) {
   const projects = mergeById(b.projects, l.projects, r.projects, mergeProjectLeaf);
   const inbox = mergeById(b.inbox, l.inbox, r.inbox, (bb, ll, rr) => mergeGenericLeaf("task", bb, ll, rr));
   const notes = mergeById(b.notes, l.notes, r.notes, (bb, ll, rr) => mergeGenericLeaf("note", bb, ll, rr));
+  const templates = mergeById(b.templates, l.templates, r.templates, (bb, ll, rr) => mergeGenericLeaf("template", bb, ll, rr));
 
   return {
     merged: {
       projects: projects.merged,
       inbox: inbox.merged,
       notes: notes.merged,
+      templates: templates.merged,
       completionLog: mergeLog(b.completionLog, l.completionLog, r.completionLog),
       focusLog: mergeLog(b.focusLog, l.focusLog, r.focusLog),
       lastResetDate: mergeScalar(b.lastResetDate, l.lastResetDate, r.lastResetDate),
@@ -126,6 +128,6 @@ export function mergeWorkspace(base, local, remote) {
       runStart: mergeScalar(b.runStart, l.runStart, r.runStart),
       lastSelectedId: mergeScalar(b.lastSelectedId, l.lastSelectedId, r.lastSelectedId),
     },
-    conflicts: [...projects.conflicts, ...inbox.conflicts, ...notes.conflicts],
+    conflicts: [...projects.conflicts, ...inbox.conflicts, ...notes.conflicts, ...templates.conflicts],
   };
 }

@@ -841,6 +841,14 @@ button{touch-action:manipulation;}
 .pd-next-action-star:hover{color:var(--muted);}
 .pd-next-action-star.on{color:var(--accent);}
 
+/* ---- P3: project templates ---- */
+.pd-template-row{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;}
+.pd-template-chip-wrap{display:flex; align-items:center; gap:2px;}
+.pd-template-delete{
+  background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; padding:2px 4px; line-height:1;
+}
+.pd-template-delete:hover{color:var(--danger);}
+
 /* ---- P3: project health strip ---- */
 .pd-health-strip{
   display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:10px;

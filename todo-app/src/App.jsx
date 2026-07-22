@@ -57,7 +57,7 @@ const isPlainObject = (v) => v !== null && typeof v === "object" && !Array.isArr
 // every field, just enough to refuse the shapes that would otherwise crash migrate().
 function validateImportShape(parsed) {
   if (!isPlainObject(parsed)) return "That file doesn't look like a projects-export .json file.";
-  for (const f of ["projects", "inbox", "notes"]) {
+  for (const f of ["projects", "inbox", "notes", "templates"]) {
     if (parsed[f] !== undefined && !Array.isArray(parsed[f])) return `"${f}" should be a list in that file — it looks corrupted.`;
   }
   for (const f of ["completionLog", "focusLog"]) {
@@ -66,7 +66,7 @@ function validateImportShape(parsed) {
   for (const p of parsed.projects || []) {
     if (!isPlainObject(p) || typeof p.id !== "string" || typeof p.name !== "string") return "One of the projects in that file is missing required fields.";
   }
-  for (const f of ["inbox", "notes"]) {
+  for (const f of ["inbox", "notes", "templates"]) {
     for (const item of parsed[f] || []) {
       if (!isPlainObject(item) || typeof item.id !== "string") return `One of the items in "${f}" is missing an id.`;
     }
@@ -84,6 +84,24 @@ const NAV_ITEMS = [
   { key: "stats", label: "Insights", icon: "stats" },
 ];
 const SCREEN_TITLES = { today: "Today", tasks: "Tasks", brain: "Brain", projects: "Projects", calendar: "Calendar", stats: "Insights" };
+// Seeded once (see migrateRoot below) — a project's own tasks/notes should feel
+// deliberately minimal to start; a couple of built-in examples, not a library.
+const DEFAULT_TEMPLATES = [
+  {
+    id: "tmpl-generic", name: "Generic project",
+    tasks: [
+      { title: "Kickoff call", priority: "med", recurring: false },
+      { title: "Draft scope", priority: "high", recurring: false },
+      { title: "Client review", priority: "med", recurring: false },
+    ],
+    notes: [],
+  },
+  {
+    id: "tmpl-checkin", name: "Recurring check-in",
+    tasks: [{ title: "Weekly status update", priority: "med", recurring: true }],
+    notes: [],
+  },
+];
 // Shared defaults for both project.tasks[] and the project-less inbox[] — additive only,
 // never fabricates completedAt/history for tasks that were already done pre-redesign.
 function migrateTask(t) {
@@ -136,6 +154,9 @@ function migrateRoot(data) {
     // Standalone notes, not tied to any project — same {id, text} shape as project.notes,
     // and sanitized the same way (see migrate() above) for the same reason.
     notes: (data.notes || []).map((n) => ({ ...n, text: sanitizeHtml(/<[a-z]/i.test(n.text) ? n.text : textToHtml(n.text)) })),
+    // Seeded only when the key has genuinely never been persisted (not merely empty),
+    // so deleting every template doesn't resurrect the built-ins on the next load.
+    templates: data.templates !== undefined ? data.templates : DEFAULT_TEMPLATES,
     completionLog: data.completionLog || {},
     focusLog: data.focusLog || {},
     lastResetDate: data.lastResetDate || todayISO(),
@@ -154,6 +175,7 @@ function toWorkspace(data) {
     projects: (data.projects || []).map(migrate),
     inbox: root.inbox,
     notes: root.notes,
+    templates: root.templates,
     completionLog: root.completionLog,
     focusLog: root.focusLog,
     lastResetDate: root.lastResetDate,
@@ -755,6 +777,7 @@ function AppShell({ userId }) {
   const [loaded, setLoaded] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newProj, setNewProj] = useState({ name: "", client: "", location: "", startDate: todayISO() });
+  const [newProjTemplateId, setNewProjTemplateId] = useState(null);
   const [taskInput, setTaskInput] = useState("");
   const [noiseInput, setNoiseInput] = useState("");
   const [syncState, setSyncState] = useState("saved"); // 'saving' | 'saved' | 'offline' | 'conflict'
@@ -764,6 +787,7 @@ function AppShell({ userId }) {
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [statusMenuAnchor, setStatusMenuAnchor] = useState(null); // { x, y } — status popover on the project detail header
+  const [savingTemplateName, setSavingTemplateName] = useState(null); // draft text while the "save as template" input is open, null when closed
   const [pendingImport, setPendingImport] = useState(null);
   const [importNote, setImportNote] = useState("");
   const [toast, setToast] = useState(null);
@@ -778,6 +802,7 @@ function AppShell({ userId }) {
   // ---- redesign: project-less inbox, completion/focus history, recurring reset, time tracking ----
   const [inbox, setInbox] = useState([]);
   const [notes, setNotes] = useState([]); // standalone notes (Brain screen), parallel to inbox
+  const [templates, setTemplates] = useState(DEFAULT_TEMPLATES); // project templates, seeded via migrateRoot on load
   const [completionLog, setCompletionLog] = useState({});
   const [focusLog, setFocusLog] = useState({});
   const [lastResetDate, setLastResetDate] = useState(null);
@@ -843,6 +868,7 @@ function AppShell({ userId }) {
   const projectsRef = useRef(projects); projectsRef.current = projects;
   const inboxRef = useRef(inbox); inboxRef.current = inbox;
   const notesRef = useRef(notes); notesRef.current = notes;
+  const templatesRef = useRef(templates); templatesRef.current = templates;
   const completionLogRef = useRef(completionLog); completionLogRef.current = completionLog;
   const focusLogRef = useRef(focusLog); focusLogRef.current = focusLog;
   const lastResetDateRef = useRef(lastResetDate); lastResetDateRef.current = lastResetDate;
@@ -862,6 +888,7 @@ function AppShell({ userId }) {
     const root = migrateRoot(data);
     setInbox(root.inbox); inboxRef.current = root.inbox;
     setNotes(root.notes); notesRef.current = root.notes;
+    setTemplates(root.templates); templatesRef.current = root.templates;
     setCompletionLog(root.completionLog); completionLogRef.current = root.completionLog;
     setFocusLog(root.focusLog); focusLogRef.current = root.focusLog;
     setLastResetDate(root.lastResetDate); lastResetDateRef.current = root.lastResetDate;
@@ -922,6 +949,7 @@ function AppShell({ userId }) {
     projects: projectsRef.current,
     inbox: inboxRef.current,
     notes: notesRef.current,
+    templates: templatesRef.current,
     completionLog: completionLogRef.current,
     focusLog: focusLogRef.current,
     lastResetDate: lastResetDateRef.current,
@@ -1036,6 +1064,24 @@ function AppShell({ userId }) {
   const updateNotes = useCallback((fn) => {
     setNotes((prev) => { const next = fn(prev); notesRef.current = next; persist(); return next; });
   }, [persist]);
+
+  const updateTemplates = useCallback((fn) => {
+    setTemplates((prev) => { const next = fn(prev); templatesRef.current = next; persist(); return next; });
+  }, [persist]);
+
+  // Captures a project's current open task titles/priority/recurring + plain-text notes
+  // into a new reusable template — never touches the source project.
+  const saveProjectAsTemplate = (project, name) => {
+    const clean = name.trim();
+    if (!clean) return;
+    const template = {
+      id: uid(), name: clean,
+      tasks: project.tasks.filter((t) => !t.done).map((t) => ({ title: t.title, priority: t.priority, recurring: t.recurring })),
+      notes: project.notes.map((n) => htmlToPlain(n.text)).filter(Boolean),
+    };
+    updateTemplates((ts) => [...ts, template]);
+  };
+  const deleteTemplate = (id) => updateTemplates((ts) => ts.filter((t) => t.id !== id));
 
   // ---- generalized note lookup: a note can be standalone or live in any project ----
   const locateAndPatchNote = useCallback((noteId, fn) => {
@@ -1253,15 +1299,19 @@ function AppShell({ userId }) {
   const addProject = () => {
     const name = newProj.name.trim();
     if (!name) return;
+    const template = templates.find((t) => t.id === newProjTemplateId);
     const proj = {
       id: uid(), name, client: newProj.client.trim(), location: newProj.location.trim(), phase: "",
       status: "active", outcome: "",
-      startDate: newProj.startDate || todayISO(), notes: [], colorIdx: projects.length % PALETTE.length,
-      tasks: [], createdAt: Date.now(),
+      startDate: newProj.startDate || todayISO(), colorIdx: projects.length % PALETTE.length,
+      createdAt: Date.now(),
+      tasks: (template?.tasks || []).map((t) => migrateTask({ id: uid(), title: t.title, priority: t.priority || "med", recurring: !!t.recurring, done: false, deadline: todayISO(), createdAt: Date.now() })),
+      notes: (template?.notes || []).map((text) => ({ id: uid(), text: textToHtml(text), createdAt: Date.now() })),
     };
     update((prev) => [...prev, proj]);
     setSelectedId(proj.id); setAdding(false);
     setNewProj({ name: "", client: "", location: "", startDate: todayISO() });
+    setNewProjTemplateId(null);
   };
 
   const patchProject = (patch) => update((prev) => prev.map((p) => (p.id === selected.id ? { ...p, ...patch } : p)));
@@ -1524,7 +1574,7 @@ function AppShell({ userId }) {
     const payload = {
       schemaVersion: 1,
       exportedAt: new Date().toISOString(),
-      projects, inbox, notes, completionLog, focusLog, lastResetDate,
+      projects, inbox, notes, templates, completionLog, focusLog, lastResetDate,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -1547,6 +1597,7 @@ function AppShell({ userId }) {
         projects: (parsed.projects || []).map(migrate),
         inbox: (parsed.inbox || []).map(migrateTask),
         notes: (parsed.notes || []).map((n) => ({ ...n, text: sanitizeHtml(/<[a-z]/i.test(n.text) ? n.text : textToHtml(n.text)) })),
+        templates: parsed.templates || [],
         completionLog: parsed.completionLog || {},
         focusLog: parsed.focusLog || {},
         lastResetDate: typeof parsed.lastResetDate === "string" ? parsed.lastResetDate : null,
@@ -1571,6 +1622,10 @@ function AppShell({ userId }) {
     update(() => pendingImport.projects);
     updateInbox(() => pendingImport.inbox);
     updateNotes(() => pendingImport.notes);
+    // Only replace templates when the file actually has some — an export from before
+    // this field existed has none, and silently wiping the current templates on a
+    // "Replace" from an old backup would be exactly the kind of silent data loss to avoid.
+    if (pendingImport.templates.length) updateTemplates(() => pendingImport.templates);
     setCompletionLog(pendingImport.completionLog); completionLogRef.current = pendingImport.completionLog;
     setFocusLog(pendingImport.focusLog); focusLogRef.current = pendingImport.focusLog;
     if (pendingImport.lastResetDate) { setLastResetDate(pendingImport.lastResetDate); lastResetDateRef.current = pendingImport.lastResetDate; }
@@ -1603,6 +1658,10 @@ function AppShell({ userId }) {
     const newNotes = pendingImport.notes.filter((n) => !existingNoteIds.has(n.id));
     if (newNotes.length) updateNotes((ns) => [...ns, ...newNotes]);
 
+    const existingTemplateIds = new Set(templatesRef.current.map((t) => t.id));
+    const newTemplates = pendingImport.templates.filter((t) => !existingTemplateIds.has(t.id));
+    if (newTemplates.length) updateTemplates((ts) => [...ts, ...newTemplates]);
+
     // The imported file's logs are treated as independent history added on top of the
     // current counts (same delta-sum spirit as the realtime merge), not a snapshot
     // that replaces today's numbers — an existing local id always wins on collision,
@@ -1610,7 +1669,7 @@ function AppShell({ userId }) {
     Object.entries(pendingImport.completionLog || {}).forEach(([date, count]) => { if (count) bumpCompletionLog(date, count); });
     Object.entries(pendingImport.focusLog || {}).forEach(([date, seconds]) => { if (seconds) bumpFocusLog(date, seconds); });
 
-    const addedCount = newProjects.length + newInboxTasks.length + newNotes.length;
+    const addedCount = newProjects.length + newInboxTasks.length + newNotes.length + newTemplates.length;
     setPendingImport(null);
     setImportNote(addedCount
       ? `Merged in ${addedCount} new item${addedCount !== 1 ? "s" : ""}.`
@@ -1894,6 +1953,22 @@ function AppShell({ userId }) {
 
           {adding ? (
             <div className="pd-form">
+              {templates.length > 0 && (
+                <div className="pd-template-row">
+                  <button type="button" className={`pd-review-chip ${newProjTemplateId === null ? "active" : ""}`}
+                    onClick={() => setNewProjTemplateId(null)}>blank</button>
+                  {templates.map((t) => (
+                    <span key={t.id} className="pd-template-chip-wrap">
+                      <button type="button" className={`pd-review-chip ${newProjTemplateId === t.id ? "active" : ""}`}
+                        onClick={() => { setNewProjTemplateId(t.id); if (!newProj.name.trim()) setNewProj({ ...newProj, name: t.name }); }}>
+                        {t.name}
+                      </button>
+                      <button type="button" className="pd-template-delete" aria-label={`Delete template "${t.name}"`}
+                        onClick={() => { if (newProjTemplateId === t.id) setNewProjTemplateId(null); deleteTemplate(t.id); }}>×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
               <input type="text" placeholder="Project name" value={newProj.name} autoFocus enterKeyHint="next"
                 onChange={(e) => setNewProj({ ...newProj, name: e.target.value })}
                 onKeyDown={(e) => { if (e.key === "Enter") addProject(); if (e.key === "Escape") setAdding(false); }} />
@@ -2007,8 +2082,22 @@ function AppShell({ userId }) {
                     </div>
                   </div>
                 </div>
+                <button type="button" className="pd-data-btn" onClick={() => setSavingTemplateName(selected.name)}>save as template</button>
                 <button className="pd-danger-btn pd-press" onClick={deleteProjectWithUndo}>delete project</button>
               </div>
+              {savingTemplateName !== null && (
+                <div className="pd-form-row" style={{ marginTop: 8 }}>
+                  <input type="text" value={savingTemplateName} autoFocus placeholder="Template name"
+                    onChange={(e) => setSavingTemplateName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { saveProjectAsTemplate(selected, savingTemplateName); setSavingTemplateName(null); }
+                      if (e.key === "Escape") setSavingTemplateName(null);
+                    }} />
+                  <button type="button" className="pd-btn pd-press"
+                    onClick={() => { saveProjectAsTemplate(selected, savingTemplateName); setSavingTemplateName(null); }}>save</button>
+                  <button type="button" className="pd-btn ghost pd-press" onClick={() => setSavingTemplateName(null)}>cancel</button>
+                </div>
+              )}
               {statusMenuAnchor && (
                 <StatusPicker x={statusMenuAnchor.x} y={statusMenuAnchor.y} value={selected.status || "active"}
                   onSelect={(s) => { patchProject({ status: s }); setStatusMenuAnchor(null); }}
