@@ -72,6 +72,14 @@ export function startedLabel(startDate) {
 export const PRIORITY_ORDER = { high: 0, med: 1, low: 2 };
 export const PRIORITY_CYCLE = { med: "high", high: "low", low: "med" };
 export const PRIORITY_COLOR = { high: "var(--priority-high)", med: "var(--accent)", low: "var(--muted)" };
+export const STATUS_LABEL = { active: "Active", waiting: "Waiting", someday: "Someday", completed: "Completed", archived: "Archived" };
+export const STATUS_COLOR = {
+  active: "var(--accent)", waiting: "var(--priority-high)", someday: "var(--muted)",
+  completed: "var(--ok)", archived: "var(--muted)",
+};
+// Bucket rank for attentionSort — active/waiting sort together by soonest due date (same
+// as before status existed), someday/completed/archived sink in that order beneath them.
+export const STATUS_ORDER = { active: 0, waiting: 0, someday: 1, completed: 2, archived: 3 };
 export function liveTaskSeconds(t, runningTaskId, runStart) {
   return t.trackedSeconds + (runningTaskId === t.id && runStart ? (Date.now() - runStart) / 1000 : 0);
 }
@@ -125,9 +133,13 @@ export function parseQuickAdd(raw) {
   if (!m) return { title, timeLabel: null };
   return { title: title.replace(m[0], "").replace(/\s{2,}/g, " ").trim(), timeLabel: m[0].toUpperCase() };
 }
+// Buckets by status first (active/waiting > someday > completed > archived), then sorts
+// within a bucket by soonest due date. Replaces the old "100%-complete sinks to the
+// bottom" rule now that status is an explicit, user-controlled signal instead of a
+// task-count proxy for done-ness.
 export function attentionSort(a, b) {
-  const doneA = progressOf(a) === 100, doneB = progressOf(b) === 100;
-  if (doneA !== doneB) return doneA ? 1 : -1;
+  const sa = STATUS_ORDER[a.status] ?? 0, sb = STATUS_ORDER[b.status] ?? 0;
+  if (sa !== sb) return sa - sb;
   const da = daysLeft(nextDue(a)), db = daysLeft(nextDue(b));
   if (da === null && db === null) return a.createdAt - b.createdAt;
   if (da === null) return 1;

@@ -135,6 +135,12 @@ button{touch-action:manipulation;}
 .pd-detail-head{display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;}
 .pd-proj-name{font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:26px; letter-spacing:-0.02em; border:none; background:transparent; width:100%; color:var(--ink);}
 .pd-proj-name:focus{outline:none; border-bottom:2px solid var(--accent);}
+.pd-outcome-input{
+  font-family:'Plus Jakarta Sans',sans-serif; font-size:14px; color:var(--muted); border:none; background:transparent;
+  width:100%; padding:4px 0 10px; margin-top:-4px;
+}
+.pd-outcome-input:focus{outline:none; color:var(--ink);}
+.pd-outcome-input::placeholder{color:var(--muted); opacity:.6;}
 .pd-meta-grid{display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; align-items:flex-end;}
 .pd-field{display:flex; flex-direction:column; gap:3px;}
 .pd-field label{font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted);}
@@ -825,6 +831,24 @@ button{touch-action:manipulation;}
 .pd-task-menu button:hover{background:var(--card);}
 .pd-task-menu button.danger{color:var(--danger);}
 .pd-defer-menu, .pd-move-menu{max-height:min(320px, 70vh); overflow-y:auto;}
+.pd-status-menu button{display:flex; align-items:center; gap:8px;}
+.pd-status-menu button.active{background:var(--card); color:var(--accent);}
+
+/* ---- P3: project status ---- */
+.pd-status-dot{width:8px; height:8px; border-radius:50%; flex-shrink:0;}
+.pd-status-trigger{
+  font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink);
+  border:1px solid var(--line); border-radius:var(--r-sm); padding:8px 10px; background:var(--raised);
+  cursor:pointer; display:flex; align-items:center; gap:7px; white-space:nowrap; min-height:36px;
+}
+.pd-status-trigger:hover{border-color:var(--accent);}
+.pd-card-status{font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); display:flex; align-items:center; gap:5px; margin-top:2px;}
+.pd-card.archived{opacity:.5;}
+.pd-archived-reveal{
+  background:none; border:none; color:var(--muted); cursor:pointer; padding:8px 0; font-size:12px;
+  font-family:'IBM Plex Mono',monospace; text-align:left;
+}
+.pd-archived-reveal:hover{color:var(--accent);}
 
 /* ---- redesign: Today — Upcoming list ---- */
 .pd-upcoming-list{list-style:none;}

@@ -14,6 +14,7 @@ import { CaptureBar } from "./components/CaptureBar";
 import { NoteToTaskModal } from "./components/NoteToTaskModal";
 import { SyncStatus } from "./components/SyncStatus";
 import { DeferMenu } from "./components/DeferMenu";
+import { StatusPicker } from "./components/StatusPicker";
 import { TodayScreen } from "./screens/Today";
 import { CalendarScreen } from "./screens/Calendar";
 import { BrainScreen } from "./screens/BrainScreen";
@@ -22,7 +23,7 @@ import {
   uid, pad, todayISO, localDateISO, colorOf, progressOf, dueLabel, fmtDate, nextDue, startedLabel,
   PRIORITY_CYCLE, PRIORITY_COLOR, liveTaskSeconds, formatDuration, currentStreak, weekBars, heatmapCells,
   parseQuickAdd, attentionSort, moveItem, moveBy, taskTimeRangeLabel, PALETTE, DOW, MONTHS,
-  tomorrowISO, thisWeekendISO, nextWeekMondayISO,
+  tomorrowISO, thisWeekendISO, nextWeekMondayISO, STATUS_LABEL, STATUS_COLOR,
 } from "./lib/helpers";
 import { parseCapture } from "./lib/capture";
 
@@ -114,6 +115,8 @@ function migrate(p, i) {
   if (out.client === undefined) out.client = "";
   if (out.location === undefined) out.location = "";
   if (out.phase === undefined) out.phase = "";
+  if (out.status === undefined) out.status = "active";
+  if (out.outcome === undefined) out.outcome = "";
   if (out.colorIdx === undefined) {
     const oldIdx = OLD_HUES.indexOf(out.color);
     out.colorIdx = oldIdx >= 0 ? oldIdx : i % PALETTE.length;
@@ -752,6 +755,8 @@ function AppShell({ userId }) {
   const [syncConflicts, setSyncConflicts] = useState([]);
   const [view, setView] = useState("list");
   const [query, setQuery] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
+  const [statusMenuAnchor, setStatusMenuAnchor] = useState(null); // { x, y } — status popover on the project detail header
   const [pendingImport, setPendingImport] = useState(null);
   const [importNote, setImportNote] = useState("");
   const [toast, setToast] = useState(null);
@@ -1218,15 +1223,19 @@ function AppShell({ userId }) {
 
   /* ---- derived ---- */
   const sorted = useMemo(() => [...projects].sort(attentionSort), [projects]);
+  // Archived projects stay out of the way by default (keeps the list focused on live
+  // work without deleting anything) but a search still reaches them — hiding a project
+  // you're actively searching for would be more confusing than helpful.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return sorted;
+    if (!q) return showArchived ? sorted : sorted.filter((p) => p.status !== "archived");
     return sorted.filter((p) =>
-      [p.name, p.client, p.location, p.phase].some((s) => (s || "").toLowerCase().includes(q)) ||
+      [p.name, p.client, p.location, p.phase, p.outcome].some((s) => (s || "").toLowerCase().includes(q)) ||
       p.tasks.some((t) => t.title.toLowerCase().includes(q)) ||
       p.notes.some((n) => htmlToPlain(n.text).toLowerCase().includes(q))
     );
-  }, [sorted, query]);
+  }, [sorted, query, showArchived]);
+  const archivedCount = useMemo(() => projects.filter((p) => p.status === "archived").length, [projects]);
   const selected = projects.find((p) => p.id === selectedId) || null;
   // Includes inbox (standalone) tasks — not just project tasks — so "overall" reflects
   // everything checked off, including tasks added straight from the Today homepage.
@@ -1239,6 +1248,7 @@ function AppShell({ userId }) {
     if (!name) return;
     const proj = {
       id: uid(), name, client: newProj.client.trim(), location: newProj.location.trim(), phase: "",
+      status: "active", outcome: "",
       startDate: newProj.startDate || todayISO(), notes: [], colorIdx: projects.length % PALETTE.length,
       tasks: [], createdAt: Date.now(),
     };
@@ -1895,9 +1905,10 @@ function AppShell({ userId }) {
             filtered.map((p) => {
               const pct = progressOf(p), c = colorOf(p), due = dueLabel(nextDue(p));
               const clientLoc = [p.client, p.location].filter(Boolean).join(" · ");
+              const status = p.status || "active";
               return (
                 <div key={p.id} role="button" tabIndex={0}
-                  className={`pd-card ${p.id === selectedId ? "selected" : ""}`}
+                  className={`pd-card ${p.id === selectedId ? "selected" : ""} ${status === "archived" ? "archived" : ""}`}
                   style={{ background: c.bg, "--pfg": c.fg }}
                   onClick={() => setSelectedId(p.id)}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedId(p.id); } }}>
@@ -1910,11 +1921,22 @@ function AppShell({ userId }) {
                       {due && <> · <span className={due.overdue ? "overdue" : ""}>next due {due.text}</span></>}
                       {!due && startedLabel(p.startDate) && <> · {startedLabel(p.startDate)}</>}
                     </div>
+                    {status !== "active" && (
+                      <div className="pd-card-status">
+                        <span className="pd-status-dot" style={{ background: STATUS_COLOR[status] }} />
+                        {STATUS_LABEL[status]}
+                      </div>
+                    )}
                     {p.phase && <span className="pd-phase">{p.phase}</span>}
                   </div>
                 </div>
               );
             })
+          )}
+          {!showArchived && archivedCount > 0 && !query.trim() && (
+            <button type="button" className="pd-archived-reveal" onClick={() => setShowArchived(true)}>
+              {archivedCount} archived — show
+            </button>
           )}
         </div>
 
@@ -1932,6 +1954,9 @@ function AppShell({ userId }) {
                 <div style={{ flex: 1, minWidth: 240 }}>
                   <input className="pd-proj-name" value={selected.name}
                     onChange={(e) => patchProject({ name: e.target.value })} aria-label="Project name" />
+                  <input className="pd-outcome-input" value={selected.outcome || ""}
+                    placeholder="What does done look like?"
+                    onChange={(e) => patchProject({ outcome: e.target.value })} aria-label="Project outcome" />
                   <div className="pd-meta-grid">
                     <div className="pd-field">
                       <label>Client</label>
@@ -1951,10 +1976,23 @@ function AppShell({ userId }) {
                       <label>Started</label>
                       <DatePicker value={selected.startDate} onChange={(iso) => patchProject({ startDate: iso || todayISO() })} />
                     </div>
+                    <div className="pd-field">
+                      <label>Status</label>
+                      <button type="button" className="pd-status-trigger"
+                        onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setStatusMenuAnchor({ x: r.left, y: r.bottom + 6 }); }}>
+                        <span className="pd-status-dot" style={{ background: STATUS_COLOR[selected.status || "active"] }} />
+                        {STATUS_LABEL[selected.status || "active"]}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <button className="pd-danger-btn pd-press" onClick={deleteProjectWithUndo}>delete project</button>
               </div>
+              {statusMenuAnchor && (
+                <StatusPicker x={statusMenuAnchor.x} y={statusMenuAnchor.y} value={selected.status || "active"}
+                  onSelect={(s) => { patchProject({ status: s }); setStatusMenuAnchor(null); }}
+                  onClose={() => setStatusMenuAnchor(null)} />
+              )}
 
               <div style={{ marginTop: 14 }} className="pd-overall-label">
                 {selPct === null ? "not started" : `${doneCount}/${selected.tasks.length} tasks · ${selPct}%`}
