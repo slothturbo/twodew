@@ -62,6 +62,32 @@ export function nextDue(p) {
   if (!dates.length) return null;
   return dates.sort()[0];
 }
+// Approximates a project's "last touched" moment from timestamps that already exist
+// (no new updatedAt bookkeeping needed at every mutation site) — the most recent of the
+// project's own creation, any task's completion/creation, or any note's creation.
+export function lastTouchedAt(p) {
+  const stamps = [
+    p.createdAt,
+    ...p.tasks.map((t) => t.completedAt || t.createdAt),
+    ...p.notes.map((n) => n.createdAt || 0),
+  ].filter(Boolean);
+  return stamps.length ? Math.max(...stamps) : p.createdAt;
+}
+export function relativeTimeLabel(ms) {
+  if (!ms) return null;
+  const days = Math.floor((Date.now() - ms) / 86400000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.round(days / 7)}w ago`;
+  return `${Math.round(days / 30)}mo ago`;
+}
+export const STALE_DAYS = 14;
+// Only flags Active projects — Waiting/Someday/Completed/Archived are expected to sit
+// quietly, so flagging them would be exactly the noisy, judgmental signal to avoid.
+export function isStale(p) {
+  return (p.status || "active") === "active" && Date.now() - lastTouchedAt(p) > STALE_DAYS * 86400000;
+}
 export function startedLabel(startDate) {
   const dl = daysLeft(startDate);
   if (dl === null) return null;

@@ -841,6 +841,15 @@ button{touch-action:manipulation;}
 .pd-next-action-star:hover{color:var(--muted);}
 .pd-next-action-star.on{color:var(--accent);}
 
+/* ---- P3: project health strip ---- */
+.pd-health-strip{
+  display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:10px;
+  font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted);
+}
+.pd-health-strip .overdue{color:var(--danger);}
+.pd-stale-flag{color:var(--muted); font-style:italic;}
+.pd-card-stale{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted); font-style:italic; margin-top:2px;}
+
 /* ---- P3: project status ---- */
 .pd-status-dot{width:8px; height:8px; border-radius:50%; flex-shrink:0;}
 .pd-status-trigger{

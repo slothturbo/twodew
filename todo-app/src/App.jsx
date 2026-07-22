@@ -24,6 +24,7 @@ import {
   PRIORITY_CYCLE, PRIORITY_COLOR, liveTaskSeconds, formatDuration, currentStreak, weekBars, heatmapCells,
   parseQuickAdd, attentionSort, moveItem, moveBy, taskTimeRangeLabel, PALETTE, DOW, MONTHS,
   tomorrowISO, thisWeekendISO, nextWeekMondayISO, STATUS_LABEL, STATUS_COLOR,
+  lastTouchedAt, relativeTimeLabel, isStale,
 } from "./lib/helpers";
 import { parseCapture } from "./lib/capture";
 
@@ -1944,6 +1945,9 @@ function AppShell({ userId }) {
                         {STATUS_LABEL[status]}
                       </div>
                     )}
+                    {isStale(p) && (
+                      <div className="pd-card-stale">quiet for {relativeTimeLabel(lastTouchedAt(p)).replace(" ago", "")}</div>
+                    )}
                     {p.phase && <span className="pd-phase">{p.phase}</span>}
                   </div>
                 </div>
@@ -2017,6 +2021,18 @@ function AppShell({ userId }) {
                 {selTrackedSeconds > 0 && <> · ⏱ {formatDuration(selTrackedSeconds, false)} tracked</>}
               </div>
               <div className="pd-progressbar"><ProgressFill className="pd-progressfill" pct={selPct ?? 0} style={{ background: selColor.fg }} /></div>
+
+              <div className="pd-health-strip">
+                <span>last touched {relativeTimeLabel(lastTouchedAt(selected))}</span>
+                <span>next action: {selected.tasks.find((t) => t.isNextAction && !t.done)?.title || "none set"}</span>
+                <span>{selected.tasks.filter((t) => !t.done).length} open</span>
+                {dueLabel(nextDue(selected)) && (
+                  <span className={dueLabel(nextDue(selected)).overdue ? "overdue" : ""}>
+                    next due {dueLabel(nextDue(selected)).text}
+                  </span>
+                )}
+                {isStale(selected) && <span className="pd-stale-flag">quiet for {relativeTimeLabel(lastTouchedAt(selected)).replace(" ago", "")}</span>}
+              </div>
 
               <div className="pd-inputrow pd-quickadd-row">
                 <input ref={quickAddRef} className="pd-quickadd" style={{ marginTop: 0 }} enterKeyHint="send"
