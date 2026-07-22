@@ -99,6 +99,7 @@ function migrateTask(t) {
     estimateMinutes: null,
     contexts: [],
     sourceNoteId: null,
+    isNextAction: false,
     ...t,
   };
 }
@@ -452,7 +453,7 @@ function Timeline({ projects, selectedId, onSelect }) {
 /* ------------------------------------------------------------------ */
 function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle, onDeadline,
   onStartTime, onEndTime, onCyclePriority, onToggleRecurring, dragHandlers, reorderUp, reorderDown, canUp, canDown, touchReorderStart, dragClass, rkind = "task",
-  running, liveSeconds, onToggleTrack }) {
+  running, liveSeconds, onToggleTrack, onToggleNextAction }) {
   const [dx, setDx] = useState(0);
   const [snap, setSnap] = useState(false);
   const start = useRef(null);
@@ -522,6 +523,11 @@ function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle
             <button type="button" className="pd-priority-dot" title={`Priority: ${task.priority || "med"} (click to change)`}
               style={{ background: PRIORITY_COLOR[task.priority || "med"] }}
               onClick={onCyclePriority} aria-label="Cycle task priority" />
+          )}
+          {!completed && onToggleNextAction && (
+            <button type="button" className={`pd-next-action-star ${task.isNextAction ? "on" : ""}`}
+              title={task.isNextAction ? "Next action for this project (click to unmark)" : "Mark as this project's next action"}
+              onClick={onToggleNextAction} aria-label={task.isNextAction ? "Unmark as next action" : "Mark as next action"}>★</button>
           )}
           <input className={`pd-task-title ${task.done ? "done" : ""}`} value={task.title}
             onChange={(e) => onTitle(e.target.value)}
@@ -1353,6 +1359,17 @@ function AppShell({ userId }) {
     else updateInbox((ts) => [...ts, task]);
   };
 
+  // Marks a task as its project's next action, clearing the flag on every other task in
+  // that project in the same update — enforces "one per project" atomically. Only
+  // meaningful for project tasks (the inbox has no project to have a next action for).
+  const setNextAction = (projectId, taskId) => {
+    update((prev) => prev.map((p) => (
+      p.id === projectId
+        ? { ...p, tasks: p.tasks.map((t) => ({ ...t, isNextAction: t.id === taskId ? !t.isNextAction : false })) }
+        : p
+    )));
+  };
+
   // Creates a brand-new task directly in an arbitrary project (or the inbox, when
   // targetProjectId is null) — neither addInboxTask nor addTaskTitled can target an
   // arbitrary project, since each is hardcoded to one destination. Shared by quick-capture,
@@ -2025,6 +2042,7 @@ function AppShell({ userId }) {
                       onEndTime={(v) => patchTasks((ts) => ts.map((x) => x.id === t.id ? { ...x, endTime: v } : x))}
                       onCyclePriority={() => cycleTaskPriority(t.id)}
                       onToggleRecurring={() => toggleTaskRecurring(t.id)}
+                      onToggleNextAction={() => setNextAction(selected.id, t.id)}
                       running={runningTaskId === t.id} liveSeconds={liveTaskSeconds(t, runningTaskId, runStart)}
                       onToggleTrack={() => toggleTrack(t.id)}
                       reorderUp={() => patchTasks((ts) => moveBy(ts, t.id, -1))}

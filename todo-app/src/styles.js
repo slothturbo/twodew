@@ -834,6 +834,13 @@ button{touch-action:manipulation;}
 .pd-status-menu button{display:flex; align-items:center; gap:8px;}
 .pd-status-menu button.active{background:var(--card); color:var(--accent);}
 
+.pd-next-action-star{
+  background:none; border:none; font-size:14px; line-height:1; cursor:pointer; color:var(--line);
+  padding:0; margin-top:6px; flex-shrink:0;
+}
+.pd-next-action-star:hover{color:var(--muted);}
+.pd-next-action-star.on{color:var(--accent);}
+
 /* ---- P3: project status ---- */
 .pd-status-dot{width:8px; height:8px; border-radius:50%; flex-shrink:0;}
 .pd-status-trigger{

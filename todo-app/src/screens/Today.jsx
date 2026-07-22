@@ -73,6 +73,7 @@ function TodayTaskRow({ task, running, liveSeconds, onToggle, onCyclePriority, o
           <span>{taskTimeRangeLabel(task) || "Today"}</span>
           {task.projectName && <span>· {task.projectName}</span>}
           {task.recurring && <span title="Repeats daily">↻</span>}
+          {task.isNextAction && <span title="This project's next action">★</span>}
           {subtaskLabel && <span>{subtaskLabel}</span>}
         </div>
       </div>

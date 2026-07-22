@@ -187,6 +187,10 @@ export function computeTodayView(projects, inbox) {
   ];
   const relevant = all.filter((t) => {
     if (t.recurring) return true;
+    // A project's marked next action is relevant regardless of its own deadline (or lack
+    // of one) — it's the thing to work on now, not necessarily the thing due now. Without
+    // this it would never reach nextUpCandidates unless it happened to also be due today.
+    if (t.isNextAction && !t.done) return true;
     if (!t.done) return !t.deadline || t.deadline <= today;
     return t.completedAt && localDateISO(t.completedAt) === today;
   });
@@ -224,9 +228,9 @@ const nowHM = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d
 // Ordered "what should I do next" candidates from computeTodayView's output — first
 // match wins for the Next Up card; the full order backs the "not this" replace control.
 // Tiers: a task whose scheduled time window is happening right now > a high-priority
-// task due today > (reserved: a project's marked next action, once that field exists)
-// > the most-overdue task > whatever's simply first in the existing sort, so there's
-// always *something* to suggest as long as any task is open.
+// task due today > a project's marked next action > the most-overdue task > whatever's
+// simply first in the existing sort, so there's always *something* to suggest as long
+// as any task is open.
 export function nextUpCandidates(items) {
   const today = todayISO();
   const hm = nowHM();
@@ -240,14 +244,17 @@ export function nextUpCandidates(items) {
   const highToday = open.filter((t) => !dueNowIds.has(t.id) && t.deadline === today && t.priority === "high");
   const highTodayIds = new Set(highToday.map((t) => t.id));
 
+  const nextAction = open.filter((t) => !dueNowIds.has(t.id) && !highTodayIds.has(t.id) && t.isNextAction);
+  const nextActionIds = new Set(nextAction.map((t) => t.id));
+
   const overdue = open
-    .filter((t) => !dueNowIds.has(t.id) && !highTodayIds.has(t.id) && t.deadline && t.deadline < today)
+    .filter((t) => !dueNowIds.has(t.id) && !highTodayIds.has(t.id) && !nextActionIds.has(t.id) && t.deadline && t.deadline < today)
     .sort((a, b) => (a.deadline < b.deadline ? -1 : 1));
   const overdueIds = new Set(overdue.map((t) => t.id));
 
-  const rest = open.filter((t) => !dueNowIds.has(t.id) && !highTodayIds.has(t.id) && !overdueIds.has(t.id));
+  const rest = open.filter((t) => !dueNowIds.has(t.id) && !highTodayIds.has(t.id) && !nextActionIds.has(t.id) && !overdueIds.has(t.id));
 
-  return [...dueNow, ...highToday, ...overdue, ...rest];
+  return [...dueNow, ...highToday, ...nextAction, ...overdue, ...rest];
 }
 export function pickNextUp(items) {
   return nextUpCandidates(items)[0] || null;
