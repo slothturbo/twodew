@@ -217,6 +217,9 @@ export function computeTodayView(projects, inbox) {
     // of one) — it's the thing to work on now, not necessarily the thing due now. Without
     // this it would never reach nextUpCandidates unless it happened to also be due today.
     if (t.isNextAction && !t.done) return true;
+    // A task planned for today is relevant regardless of its own deadline — planning to
+    // work on something today is the point, even if it's not due until later.
+    if (t.plannedDate === today && !t.done) return true;
     if (!t.done) return !t.deadline || t.deadline <= today;
     return t.completedAt && localDateISO(t.completedAt) === today;
   });
@@ -263,7 +266,7 @@ export function nextUpCandidates(items) {
   const open = items.filter((t) => !t.done);
 
   const dueNow = open
-    .filter((t) => t.deadline === today && t.startTime && t.startTime <= hm && (!t.endTime || t.endTime > hm))
+    .filter((t) => (t.plannedDate || t.deadline) === today && t.startTime && t.startTime <= hm && (!t.endTime || t.endTime > hm))
     .sort((a, b) => (a.startTime < b.startTime ? -1 : 1));
   const dueNowIds = new Set(dueNow.map((t) => t.id));
 
@@ -295,7 +298,9 @@ export function splitTodayBuckets(items, excludeId) {
   const today = todayISO();
   const hm = nowHM();
   const open = items.filter((t) => !t.done && t.id !== excludeId);
-  const laterToday = open.filter((t) => t.deadline === today && t.startTime && t.startTime > hm);
+  // startTime/endTime belong to whichever of plannedDate/deadline is set for a task —
+  // plannedDate takes precedence, matching TaskEditModal's own field-ownership rule.
+  const laterToday = open.filter((t) => (t.plannedDate || t.deadline) === today && t.startTime && t.startTime > hm);
   const laterTodayIds = new Set(laterToday.map((t) => t.id));
   const now = open.filter((t) => !laterTodayIds.has(t.id));
   const doneToday = items.filter((t) => t.done);

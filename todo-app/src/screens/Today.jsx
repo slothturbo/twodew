@@ -74,6 +74,7 @@ function TodayTaskRow({ task, running, liveSeconds, onToggle, onCyclePriority, o
           {task.projectName && <span>· {task.projectName}</span>}
           {task.recurring && <span title="Repeats daily">↻</span>}
           {task.isNextAction && <span title="This project's next action">★</span>}
+          {task.plannedDate === todayISO() && <span title="Planned for today">planned</span>}
           {subtaskLabel && <span>{subtaskLabel}</span>}
         </div>
       </div>

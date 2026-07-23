@@ -119,6 +119,7 @@ function migrateTask(t) {
     contexts: [],
     sourceNoteId: null,
     isNextAction: false,
+    plannedDate: null,
     ...t,
   };
 }
@@ -610,7 +611,7 @@ function FocusBanner({ task, projectName, seconds, onStop, onOpen }) {
 /*  Single-task editor — for inbox tasks reached from the Calendar,     */
 /*  which have no project page of their own to land on.                 */
 /* ------------------------------------------------------------------ */
-function TaskEditModal({ task, onClose, onTitle, onDeadline, onStartTime, onEndTime, onCyclePriority, onToggleRecurring, onToggleDone, onDelete, onOpenDefer, onOpenSourceNote }) {
+function TaskEditModal({ task, onClose, onTitle, onDeadline, onStartTime, onEndTime, onPlannedDate, onCyclePriority, onToggleRecurring, onToggleDone, onDelete, onOpenDefer, onOpenSourceNote }) {
   return (
     <div className="pd-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="pd-panel" role="dialog" aria-modal="true" aria-label="Task details" style={{ height: "auto" }}>
@@ -633,12 +634,21 @@ function TaskEditModal({ task, onClose, onTitle, onDeadline, onStartTime, onEndT
               onChange={(e) => onTitle(e.target.value)} aria-label="Task title" />
           </div>
           <div className="pd-form-row">
-            <DatePicker value={task.deadline} onChange={onDeadline}
-              startTime={task.startTime} endTime={task.endTime} onStartTime={onStartTime} onEndTime={onEndTime} />
+            {/* startTime/endTime belong to whichever of plannedDate/deadline is set — once a
+                planned session exists, its picker owns the time fields instead of the
+                deadline picker, so the two controls never fight over the same value. */}
+            <DatePicker value={task.deadline} onChange={onDeadline} placeholder="Set due date"
+              startTime={task.plannedDate ? null : task.startTime} endTime={task.plannedDate ? null : task.endTime}
+              onStartTime={task.plannedDate ? undefined : onStartTime} onEndTime={task.plannedDate ? undefined : onEndTime} />
             <button type="button" className={`pd-recur-toggle ${task.recurring ? "on" : ""}`} style={{ opacity: 1 }}
               onClick={onToggleRecurring} title="Repeats daily">
               ↻ {task.recurring ? "Repeats daily" : "One-time"}
             </button>
+          </div>
+          <div className="pd-form-row">
+            <div className="pd-form-label" style={{ width: "100%" }}>Plan a work session</div>
+            <DatePicker value={task.plannedDate} onChange={onPlannedDate} placeholder="Not scheduled"
+              startTime={task.startTime} endTime={task.endTime} onStartTime={onStartTime} onEndTime={onEndTime} />
           </div>
           <div className="pd-form-row">
             {!task.recurring && (
@@ -1223,6 +1233,9 @@ function AppShell({ userId }) {
   }, [locateAndPatchTask, editingTaskId]);
   const editTaskEndTime = useCallback((v) => {
     locateAndPatchTask(editingTaskId, (t) => ({ ...t, endTime: v }));
+  }, [locateAndPatchTask, editingTaskId]);
+  const editTaskPlannedDate = useCallback((iso) => {
+    locateAndPatchTask(editingTaskId, (t) => ({ ...t, plannedDate: iso }));
   }, [locateAndPatchTask, editingTaskId]);
   const deleteEditingTask = useCallback(() => {
     const task = inbox.find((t) => t.id === editingTaskId)
@@ -2238,7 +2251,7 @@ function AppShell({ userId }) {
       {editingTask && (
         <TaskEditModal task={editingTask} onClose={() => setEditingTaskId(null)}
           onTitle={editTaskTitle} onDeadline={editTaskDeadline}
-          onStartTime={editTaskStartTime} onEndTime={editTaskEndTime}
+          onStartTime={editTaskStartTime} onEndTime={editTaskEndTime} onPlannedDate={editTaskPlannedDate}
           onCyclePriority={() => cycleTaskPriority(editingTask.id)}
           onToggleRecurring={() => toggleTaskRecurring(editingTask.id)}
           onToggleDone={() => toggleTaskDone(editingTask.id)}
