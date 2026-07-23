@@ -4,6 +4,13 @@ import { HourGrid, HOUR_H } from "../components/HourGrid";
 
 const INBOX_COLOR = { fg: "var(--muted)", bg: "rgba(140,150,163,0.12)" };
 const dateISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const toMin = (hhmm) => { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; };
+const formatMinutes = (mins) => {
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
+};
 
 /* ------------------------------------------------------------------ */
 /*  Calendar screen — month/week/day planning surface. A task is placed  */
@@ -63,6 +70,35 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
     };
   };
   const dayColumns = useMemo(() => (view === "day" ? [buildColumn(cursor)] : []), [view, cursor, byDate]);
+
+  // Daily planning panel: sums estimateMinutes across everything scheduled that day and
+  // flags pairwise time-block overlaps. Deliberately no "available focus time" number —
+  // the app has no real concept of the user's actual work-hour capacity, and fabricating
+  // one would be an unearned-authority number the rest of the app avoids.
+  const dayPlan = useMemo(() => {
+    if (view !== "day" || !dayColumns.length) return null;
+    const { allDay, timed } = dayColumns[0];
+    const all = [...allDay, ...timed];
+    const plannedMinutes = all.reduce((sum, t) => sum + (t.estimateMinutes || 0), 0);
+    const overlapIds = new Set();
+    for (let i = 0; i < timed.length; i++) {
+      for (let j = i + 1; j < timed.length; j++) {
+        const a = timed[i], b = timed[j];
+        const aStart = toMin(a.startTime), aEnd = a.endTime ? toMin(a.endTime) : aStart + 30;
+        const bStart = toMin(b.startTime), bEnd = b.endTime ? toMin(b.endTime) : bStart + 30;
+        if (aStart < bEnd && bStart < aEnd) { overlapIds.add(a.id); overlapIds.add(b.id); }
+      }
+    }
+    return { count: all.length, plannedMinutes, overlapIds };
+  }, [view, dayColumns]);
+
+  const dayColumnsFlagged = useMemo(() => {
+    if (!dayPlan?.overlapIds.size) return dayColumns;
+    return dayColumns.map((col) => ({
+      ...col,
+      timed: col.timed.map((t) => (dayPlan.overlapIds.has(t.id) ? { ...t, overbooked: true } : t)),
+    }));
+  }, [dayColumns, dayPlan]);
 
   const week = useMemo(() => (view === "week" ? weekCells(cursor) : []), [view, cursor]);
   // Week is a real 7-column HourGrid on desktop, but that's unusably cramped at phone
@@ -241,8 +277,16 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
       ))}
 
       {view === "day" && (
-        <HourGrid columns={dayColumns} todayIso={todayIso} onOpenTask={chipClick}
-          colorFor={(t) => t.projectColor || INBOX_COLOR} isMobile={isMobile} dragHandlers={dragHandlers} dragOverIso={dragOverIso} />
+        <>
+          {dayPlan && dayPlan.count > 0 && (
+            <div className="pd-cal-dayplan">
+              <span>{dayPlan.count} task{dayPlan.count === 1 ? "" : "s"} planned{dayPlan.plannedMinutes > 0 ? ` · ${formatMinutes(dayPlan.plannedMinutes)} total` : ""}</span>
+              {dayPlan.overlapIds.size > 0 && <span className="pd-cal-dayplan-warn">⚠ overlapping time blocks</span>}
+            </div>
+          )}
+          <HourGrid columns={dayColumnsFlagged} todayIso={todayIso} onOpenTask={chipClick}
+            colorFor={(t) => t.projectColor || INBOX_COLOR} isMobile={isMobile} dragHandlers={dragHandlers} dragOverIso={dragOverIso} />
+        </>
       )}
 
       {view === "week" && (isMobile ? (

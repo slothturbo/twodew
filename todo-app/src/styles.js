@@ -969,6 +969,12 @@ button{touch-action:manipulation;}
 }
 .pd-cal-agenda-empty-tap{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); padding:8px 0;}
 
+.pd-cal-dayplan{
+  display:flex; align-items:center; gap:14px; flex-shrink:0; margin-bottom:10px;
+  font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--muted);
+}
+.pd-cal-dayplan-warn{color:var(--danger);}
+
 /* ---- P4: HourGrid — day/week time-block view ---- */
 .pd-hourgrid{flex:1; min-height:0; display:flex; flex-direction:column;}
 .pd-hourgrid-headrow, .pd-hourgrid-alldayrow{display:flex; flex-shrink:0;}
