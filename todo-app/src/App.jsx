@@ -24,7 +24,7 @@ import {
   PRIORITY_CYCLE, PRIORITY_COLOR, liveTaskSeconds, formatDuration, currentStreak, weekBars, heatmapCells,
   parseQuickAdd, attentionSort, moveItem, moveBy, taskTimeRangeLabel, PALETTE, DOW, MONTHS,
   tomorrowISO, thisWeekendISO, nextWeekMondayISO, STATUS_LABEL, STATUS_COLOR,
-  lastTouchedAt, relativeTimeLabel, isStale,
+  lastTouchedAt, relativeTimeLabel, isStale, monthGridCells,
 } from "./lib/helpers";
 import { parseCapture } from "./lib/capture";
 
@@ -287,17 +287,7 @@ function DatePicker({ value, onChange, placeholder = "Set date", startTime, endT
     return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
   }, [open]);
 
-  const cells = useMemo(() => {
-    const first = new Date(viewY, viewM, 1);
-    const startOffset = first.getDay();
-    const gridStart = new Date(viewY, viewM, 1 - startOffset);
-    return Array.from({ length: 42 }, (_, i) => {
-      const d = new Date(gridStart); d.setDate(gridStart.getDate() + i);
-      return d;
-    });
-  }, [viewY, viewM]);
-
-  const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const cells = useMemo(() => monthGridCells(viewY, viewM), [viewY, viewM]);
   const todayIso = todayISO();
 
   const nav = (delta) => {
@@ -331,17 +321,13 @@ function DatePicker({ value, onChange, placeholder = "Set date", startTime, endT
           </div>
           <div className="pd-dp-grid">
             {DOW.map((d, i) => <div key={i} className="pd-dp-dow">{d}</div>)}
-            {cells.map((d, i) => {
-              const iso = toISO(d);
-              const muted = d.getMonth() !== viewM;
-              return (
-                <button type="button" key={i}
-                  className={`pd-dp-cell ${muted ? "muted" : ""} ${iso === todayIso ? "today" : ""} ${iso === value ? "selected" : ""}`}
-                  onClick={() => { onChange(iso); setViewM(d.getMonth()); setViewY(d.getFullYear()); if (!showTime) setOpen(false); }}>
-                  {d.getDate()}
-                </button>
-              );
-            })}
+            {cells.map((c, i) => (
+              <button type="button" key={i}
+                className={`pd-dp-cell ${!c.inMonth ? "muted" : ""} ${c.iso === todayIso ? "today" : ""} ${c.iso === value ? "selected" : ""}`}
+                onClick={() => { onChange(c.iso); setViewM(c.date.getMonth()); setViewY(c.date.getFullYear()); if (!showTime) setOpen(false); }}>
+                {c.date.getDate()}
+              </button>
+            ))}
           </div>
           {showTime && value && (
             <div className="pd-dp-time-row">

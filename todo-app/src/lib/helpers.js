@@ -331,3 +331,28 @@ export function nextWeekdayISO(targetDow) {
   d.setDate(d.getDate() + ((targetDow - d.getDay() + 7) % 7));
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+
+/* ---- Calendar math, shared by DatePicker and the Calendar screen (month/week/day  ----
+   views) so there's exactly one implementation of "what dates does this grid cover." */
+const dateToISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+// A 42-cell (6-week) month grid starting from the Sunday on/before the 1st.
+export function monthGridCells(year, month) {
+  const first = new Date(year, month, 1);
+  const gridStart = new Date(year, month, 1 - first.getDay());
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(gridStart); d.setDate(gridStart.getDate() + i);
+    return { date: d, iso: dateToISO(d), inMonth: d.getMonth() === month };
+  });
+}
+// The 7 days (Sunday-start) of the week containing `date`.
+export function weekCells(date) {
+  const start = startOfWeek(date);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    return { date: d, iso: dateToISO(d) };
+  });
+}
+// Hour-of-day labels for a day-view/week-view time axis — 0:00 through 23:00.
+export function dayHours() {
+  return Array.from({ length: 24 }, (_, h) => ({ h, label: formatClockTime(`${pad(h)}:00`) }));
+}

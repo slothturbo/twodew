@@ -920,6 +920,21 @@ button{touch-action:manipulation;}
   line-height:1.3; border-left:2px solid; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:filter .1s ease;
 }
 .pd-cal-chip:hover{filter:brightness(1.35);}
+.pd-cal-chip.planned{border-left-style:dashed;}
+
+/* ---- P4: Calendar unscheduled panel ---- */
+.pd-cal-unscheduled{margin-bottom:14px; flex-shrink:0;}
+.pd-cal-unscheduled-toggle{
+  background:none; border:none; color:var(--muted); cursor:pointer; padding:4px 0;
+  font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.04em; text-transform:uppercase;
+}
+.pd-cal-unscheduled-toggle:hover{color:var(--accent);}
+.pd-cal-unscheduled-list{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
+.pd-cal-unscheduled-chip{
+  all:unset; box-sizing:border-box; cursor:pointer; border-radius:var(--r-pill); padding:5px 12px; font-size:12px;
+  border-left:2px solid; background:var(--card); color:var(--ink);
+}
+.pd-cal-unscheduled-chip:hover{filter:brightness(1.25);}
 
 .pd-cal-agenda{flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:2px;}
 .pd-cal-agenda-day{display:flex; gap:14px; padding:14px 2px; border-bottom:1px solid var(--line);}
@@ -938,6 +953,7 @@ button{touch-action:manipulation;}
   all:unset; box-sizing:border-box; width:100%; cursor:pointer; display:flex; align-items:baseline; gap:8px;
   border-left:2px solid; border-radius:var(--r-sm); padding:6px 10px; background:var(--card);
 }
+.pd-cal-agenda-row.planned{border-left-style:dashed;}
 .pd-cal-agenda-title{font-size:14px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .pd-cal-agenda-meta{
   font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted); flex-shrink:0;
