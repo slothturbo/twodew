@@ -909,6 +909,7 @@ button{touch-action:manipulation;}
 }
 .pd-cal-cell.today{border-color:var(--accent); background:rgba(255,90,31,0.08);}
 .pd-cal-cell.muted{opacity:.45;}
+.pd-cal-cell.drag-over{border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent);}
 .pd-cal-cell-date{
   font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:12px; flex-shrink:0;
   width:20px; height:20px; display:flex; align-items:center; justify-content:center; margin:2px 2px 0 0;
@@ -935,6 +936,13 @@ button{touch-action:manipulation;}
   border-left:2px solid; background:var(--card); color:var(--ink);
 }
 .pd-cal-unscheduled-chip:hover{filter:brightness(1.25);}
+.pd-cal-unscheduled-chip.armed{box-shadow:inset 0 0 0 1px var(--accent); color:var(--accent);}
+.pd-cal-arming-hint{
+  display:flex; align-items:center; gap:10px; margin-bottom:12px; padding:8px 12px;
+  background:rgba(255,90,46,0.1); border:1px solid var(--accent); border-radius:var(--r-sm);
+  font-size:12px; color:var(--ink); flex-shrink:0;
+}
+.pd-cal-arming-hint button{background:none; border:none; color:var(--accent); cursor:pointer; text-decoration:underline; font-size:12px;}
 
 .pd-cal-agenda{flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:2px;}
 .pd-cal-agenda-day{display:flex; gap:14px; padding:14px 2px; border-bottom:1px solid var(--line);}
@@ -959,6 +967,7 @@ button{touch-action:manipulation;}
   font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted); flex-shrink:0;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:35%;
 }
+.pd-cal-agenda-empty-tap{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); padding:8px 0;}
 
 /* ---- P4: HourGrid — day/week time-block view ---- */
 .pd-hourgrid{flex:1; min-height:0; display:flex; flex-direction:column;}
@@ -987,6 +996,8 @@ button{touch-action:manipulation;}
 }
 .pd-hourgrid-col{flex:1; min-width:0; position:relative; border-left:1px solid var(--line);}
 .pd-hourgrid-col.today{background:rgba(255,90,31,0.04);}
+.pd-hourgrid-col.drag-over{background:rgba(255,90,46,0.12);}
+.pd-hourgrid-alldaycell.drag-over{background:rgba(255,90,46,0.12); border-radius:var(--r-sm);}
 .pd-hourgrid-hourline{position:absolute; left:0; right:0; height:0; border-top:1px solid var(--line);}
 .pd-hourgrid-now{position:absolute; left:0; right:0; height:0; border-top:2px solid var(--accent); z-index:2;}
 .pd-hourgrid-block{

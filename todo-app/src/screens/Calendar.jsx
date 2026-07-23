@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { todayISO, colorOf, MONTHS, DOW, taskTimeRangeLabel, monthGridCells, weekCells, pad } from "../lib/helpers";
-import { HourGrid } from "../components/HourGrid";
+import { HourGrid, HOUR_H } from "../components/HourGrid";
 
 const INBOX_COLOR = { fg: "var(--muted)", bg: "rgba(140,150,163,0.12)" };
 const dateISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -10,10 +10,15 @@ const dateISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getD
 /*  on plannedDate when set, falling back to deadline (identical to      */
 /*  today's behavior for any task that never uses plannedDate).          */
 /* ------------------------------------------------------------------ */
-export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpenTask }) {
+export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpenTask, onScheduleTask }) {
   const [view, setView] = useState("month"); // "month" | "week" | "day"
   const [cursor, setCursor] = useState(new Date());
   const [showUnscheduled, setShowUnscheduled] = useState(!isMobile);
+  // The task currently "armed" for placement — set either by starting a desktop drag or
+  // by tapping an Unscheduled task (the mobile/no-drag path). Consumed by tapping or
+  // dropping on a day cell / hour slot. One mechanism serves both input styles.
+  const [pendingTaskId, setPendingTaskId] = useState(null);
+  const [dragOverIso, setDragOverIso] = useState(null);
   const viewY = cursor.getFullYear(), viewM = cursor.getMonth();
   const todayIso = todayISO();
 
@@ -47,7 +52,7 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
   }, [view, viewY, viewM, byDate]);
 
   // Splits a day's tasks into "all-day" (no startTime, sits in the strip above the hour
-  // axis) and "timed" (positioned as a block) — shared by day view and week view (M4).
+  // axis) and "timed" (positioned as a block) — shared by day view and week view.
   const buildColumn = (date) => {
     const iso = dateISO(date);
     const items = byDate[iso] || [];
@@ -79,6 +84,41 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
 
   const openTask = (t) => (t.projectId ? onOpenProject(t.projectId) : onOpenTask(t));
 
+  // Fires on either a real HTML5 drop or a tap on a target while a task is armed.
+  // Dropping into an hour column also derives a startTime from the vertical position
+  // (snapped to 15 minutes); dropping onto a month cell or the all-day strip doesn't.
+  const handleSchedule = (iso, e) => {
+    if (!pendingTaskId) return;
+    e?.preventDefault?.();
+    let startTime = null;
+    if (e?.currentTarget?.classList?.contains("pd-hourgrid-col")) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const minutesFromTop = ((e.clientY - rect.top) / HOUR_H) * 60;
+      const snapped = Math.max(0, Math.min(23 * 60 + 45, Math.round(minutesFromTop / 15) * 15));
+      startTime = `${pad(Math.floor(snapped / 60))}:${pad(snapped % 60)}`;
+    }
+    onScheduleTask(pendingTaskId, iso, startTime);
+    setPendingTaskId(null);
+    setDragOverIso(null);
+  };
+  // A tap on empty cell space (not a chip inside it) while armed places the pending
+  // task there; tapping an already-placed chip while armed places it on that chip's
+  // day instead of opening it (see chipClick below) — both consume the arm state.
+  const cellClickHandler = (iso) => (e) => {
+    if (e.target !== e.currentTarget) return;
+    handleSchedule(iso, e);
+  };
+  const chipClick = (t) => {
+    if (pendingTaskId) { handleSchedule(t.plannedDate || t.deadline, null); return; }
+    openTask(t);
+  };
+  const dragHandlers = {
+    onDragStart: (taskId) => setPendingTaskId(taskId),
+    onDragOver: (e, iso) => { e.preventDefault(); setDragOverIso(iso); },
+    onDrop: (iso, e) => handleSchedule(iso, e),
+    onDragEnd: () => { setPendingTaskId(null); setDragOverIso(null); },
+  };
+
   const headLabel = view === "month" ? MONTHS[viewM]
     : view === "week" && week.length ? (week[0].date.getMonth() === week[6].date.getMonth()
         ? `${MONTHS[week[0].date.getMonth()]} ${week[0].date.getDate()}–${week[6].date.getDate()}`
@@ -104,6 +144,12 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
         </div>
       </div>
 
+      {pendingTaskId && (
+        <div className="pd-cal-arming-hint">
+          tap a day to schedule it <button type="button" onClick={() => setPendingTaskId(null)}>cancel</button>
+        </div>
+      )}
+
       {unscheduled.length > 0 && (
         <div className="pd-cal-unscheduled">
           <button type="button" className="pd-cal-unscheduled-toggle" onClick={() => setShowUnscheduled((s) => !s)}>
@@ -114,8 +160,12 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
               {unscheduled.map((t) => {
                 const col = t.projectColor || INBOX_COLOR;
                 return (
-                  <button key={t.id} type="button" className="pd-cal-unscheduled-chip" style={{ borderLeftColor: col.fg }}
-                    onClick={() => openTask(t)}>
+                  <button key={t.id} type="button" className={`pd-cal-unscheduled-chip ${pendingTaskId === t.id ? "armed" : ""}`}
+                    style={{ borderLeftColor: col.fg }}
+                    draggable={!isMobile}
+                    onDragStart={() => dragHandlers.onDragStart(t.id)}
+                    onDragEnd={dragHandlers.onDragEnd}
+                    onClick={() => setPendingTaskId((id) => (id === t.id ? null : t.id))}>
                     {t.title}
                   </button>
                 );
@@ -127,19 +177,24 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
 
       {view === "month" && (isMobile ? (
         <div className="pd-cal-agenda">
-          {cells.filter((c) => c.inMonth && c.items.length > 0 && c.iso >= todayIso).map((day) => (
-            <div key={day.iso} className={`pd-cal-agenda-day ${day.iso === todayIso ? "today" : ""}`}>
+          {/* While a task is armed for placement, every day in the month becomes a tap
+              target — otherwise this list only shows days that already have something on
+              them, which would leave no empty day to place onto. */}
+          {cells.filter((c) => c.inMonth && c.iso >= todayIso && (c.items.length > 0 || pendingTaskId)).map((day) => (
+            <div key={day.iso} className={`pd-cal-agenda-day ${day.iso === todayIso ? "today" : ""}`}
+              onClick={cellClickHandler(day.iso)}>
               <div className="pd-cal-agenda-date">
                 <div className="pd-cal-agenda-daynum">{day.date.getDate()}</div>
                 <div className="pd-cal-agenda-dow">{day.date.toLocaleDateString(undefined, { weekday: "short" })}</div>
               </div>
               <div className="pd-cal-agenda-items">
+                {day.items.length === 0 && <span className="pd-cal-agenda-empty-tap">tap to schedule here</span>}
                 {day.items.map((t) => {
                   const col = t.projectColor || INBOX_COLOR;
                   const time = taskTimeRangeLabel(t);
                   return (
                     <button key={t.id} type="button" className={`pd-cal-agenda-row ${t.plannedDate ? "planned" : ""}`} style={{ borderLeftColor: col.fg }}
-                      onClick={() => openTask(t)}>
+                      onClick={() => chipClick(t)}>
                       <span className="pd-cal-agenda-title">{t.title}</span>
                       <span className="pd-cal-agenda-meta">{time ? `${time} · ` : ""}{t.projectName || "Inbox"}</span>
                     </button>
@@ -148,7 +203,7 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
               </div>
             </div>
           ))}
-          {cells.every((c) => !c.inMonth || c.items.length === 0 || c.iso < todayIso) && (
+          {!pendingTaskId && cells.every((c) => !c.inMonth || c.items.length === 0 || c.iso < todayIso) && (
             <p className="pd-empty">Nothing upcoming this month.</p>
           )}
         </div>
@@ -159,7 +214,10 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
           </div>
           <div className="pd-cal-month-grid">
             {cells.map((c) => (
-              <div key={c.iso} className={`pd-cal-cell ${c.iso === todayIso ? "today" : ""} ${!c.inMonth ? "muted" : ""}`}>
+              <div key={c.iso} className={`pd-cal-cell ${c.iso === todayIso ? "today" : ""} ${!c.inMonth ? "muted" : ""} ${dragOverIso === c.iso ? "drag-over" : ""}`}
+                onDragOver={(e) => dragHandlers.onDragOver(e, c.iso)}
+                onDrop={(e) => dragHandlers.onDrop(c.iso, e)}
+                onClick={cellClickHandler(c.iso)}>
                 <div className="pd-cal-cell-date">{c.date.getDate()}</div>
                 <div className="pd-cal-cell-items">
                   {c.items.map((t) => {
@@ -167,7 +225,10 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
                     return (
                       <button key={t.id} type="button" className={`pd-cal-chip ${t.plannedDate ? "planned" : ""}`}
                         style={{ background: col.bg, borderLeftColor: col.fg }}
-                        onClick={() => openTask(t)}>
+                        draggable={!isMobile}
+                        onDragStart={() => dragHandlers.onDragStart(t.id)}
+                        onDragEnd={dragHandlers.onDragEnd}
+                        onClick={() => chipClick(t)}>
                         {t.title}
                       </button>
                     );
@@ -180,25 +241,27 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
       ))}
 
       {view === "day" && (
-        <HourGrid columns={dayColumns} todayIso={todayIso} onOpenTask={openTask}
-          colorFor={(t) => t.projectColor || INBOX_COLOR} isMobile={isMobile} />
+        <HourGrid columns={dayColumns} todayIso={todayIso} onOpenTask={chipClick}
+          colorFor={(t) => t.projectColor || INBOX_COLOR} isMobile={isMobile} dragHandlers={dragHandlers} dragOverIso={dragOverIso} />
       )}
 
       {view === "week" && (isMobile ? (
         <div className="pd-cal-agenda">
-          {weekAgendaDays.filter((c) => c.items.length > 0).map((day) => (
-            <div key={day.iso} className={`pd-cal-agenda-day ${day.iso === todayIso ? "today" : ""}`}>
+          {weekAgendaDays.filter((c) => c.items.length > 0 || pendingTaskId).map((day) => (
+            <div key={day.iso} className={`pd-cal-agenda-day ${day.iso === todayIso ? "today" : ""}`}
+              onClick={cellClickHandler(day.iso)}>
               <div className="pd-cal-agenda-date">
                 <div className="pd-cal-agenda-daynum">{day.date.getDate()}</div>
                 <div className="pd-cal-agenda-dow">{day.date.toLocaleDateString(undefined, { weekday: "short" })}</div>
               </div>
               <div className="pd-cal-agenda-items">
+                {day.items.length === 0 && <span className="pd-cal-agenda-empty-tap">tap to schedule here</span>}
                 {day.items.map((t) => {
                   const col = t.projectColor || INBOX_COLOR;
                   const time = taskTimeRangeLabel(t);
                   return (
                     <button key={t.id} type="button" className={`pd-cal-agenda-row ${t.plannedDate ? "planned" : ""}`} style={{ borderLeftColor: col.fg }}
-                      onClick={() => openTask(t)}>
+                      onClick={() => chipClick(t)}>
                       <span className="pd-cal-agenda-title">{t.title}</span>
                       <span className="pd-cal-agenda-meta">{time ? `${time} · ` : ""}{t.projectName || "Inbox"}</span>
                     </button>
@@ -207,13 +270,13 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
               </div>
             </div>
           ))}
-          {weekAgendaDays.every((c) => c.items.length === 0) && (
+          {!pendingTaskId && weekAgendaDays.every((c) => c.items.length === 0) && (
             <p className="pd-empty">Nothing scheduled this week.</p>
           )}
         </div>
       ) : (
-        <HourGrid columns={weekColumns} todayIso={todayIso} onOpenTask={openTask}
-          colorFor={(t) => t.projectColor || INBOX_COLOR} isMobile={isMobile} />
+        <HourGrid columns={weekColumns} todayIso={todayIso} onOpenTask={chipClick}
+          colorFor={(t) => t.projectColor || INBOX_COLOR} isMobile={isMobile} dragHandlers={dragHandlers} dragOverIso={dragOverIso} />
       ))}
     </div>
   );

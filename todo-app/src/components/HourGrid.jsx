@@ -10,7 +10,7 @@ const toMinutes = (hhmm) => {
 
 // 24-hour time-block axis, shared by day view (one column) and week view (seven) —
 // one implementation of "position a task by its start/end time" rather than two.
-export function HourGrid({ columns, todayIso, onOpenTask, colorFor, dragHandlers, isMobile }) {
+export function HourGrid({ columns, todayIso, onOpenTask, colorFor, dragHandlers, isMobile, dragOverIso }) {
   const hours = dayHours();
   const hasAllDay = columns.some((c) => c.allDay.length > 0);
   const now = new Date();
@@ -44,14 +44,16 @@ export function HourGrid({ columns, todayIso, onOpenTask, colorFor, dragHandlers
         <div className="pd-hourgrid-alldayrow">
           <div className="pd-hourgrid-axis-spacer" />
           {columns.map((col) => (
-            <div key={col.iso} className="pd-hourgrid-alldaycell"
+            <div key={col.iso} className={`pd-hourgrid-alldaycell ${dragOverIso === col.iso ? "drag-over" : ""}`}
               onDragOver={dragHandlers ? (e) => dragHandlers.onDragOver(e, col.iso) : undefined}
-              onDrop={dragHandlers ? (e) => dragHandlers.onDrop(e, col.iso, null) : undefined}>
+              onDrop={dragHandlers ? (e) => dragHandlers.onDrop(col.iso, e) : undefined}
+              onClick={dragHandlers ? (e) => { if (e.target === e.currentTarget) dragHandlers.onDrop(col.iso, e); } : undefined}>
               {col.allDay.map((t) => (
                 <button key={t.id} type="button" className={`pd-hourgrid-allday-chip ${t.plannedDate ? "planned" : ""}`}
                   style={{ borderLeftColor: colorFor(t).fg }}
                   draggable={!isMobile && !!dragHandlers}
                   onDragStart={dragHandlers ? () => dragHandlers.onDragStart(t.id) : undefined}
+                  onDragEnd={dragHandlers ? () => dragHandlers.onDragEnd?.() : undefined}
                   onClick={() => onOpenTask(t)}>
                   {t.title}
                 </button>
@@ -66,9 +68,10 @@ export function HourGrid({ columns, todayIso, onOpenTask, colorFor, dragHandlers
             {hours.map((h) => <div key={h.h} className="pd-hourgrid-hourlabel" style={{ top: `${h.h * HOUR_H}px` }}>{h.label}</div>)}
           </div>
           {columns.map((col) => (
-            <div key={col.iso} className={`pd-hourgrid-col ${col.iso === todayIso ? "today" : ""}`}
+            <div key={col.iso} className={`pd-hourgrid-col ${col.iso === todayIso ? "today" : ""} ${dragOverIso === col.iso ? "drag-over" : ""}`}
               onDragOver={dragHandlers ? (e) => dragHandlers.onDragOver(e, col.iso) : undefined}
-              onDrop={dragHandlers ? (e) => dragHandlers.onDrop(e, col.iso, e) : undefined}>
+              onDrop={dragHandlers ? (e) => dragHandlers.onDrop(col.iso, e) : undefined}
+              onClick={dragHandlers ? (e) => { if (e.target === e.currentTarget) dragHandlers.onDrop(col.iso, e); } : undefined}>
               {hours.map((h) => <div key={h.h} className="pd-hourgrid-hourline" style={{ top: `${h.h * HOUR_H}px` }} />)}
               {col.iso === todayIso && <div className="pd-hourgrid-now" style={{ top: `${nowTop}px` }} />}
               {col.timed.map((t) => {
@@ -82,6 +85,7 @@ export function HourGrid({ columns, todayIso, onOpenTask, colorFor, dragHandlers
                     style={{ top, height, background: c.bg, borderLeftColor: c.fg }}
                     draggable={!isMobile && !!dragHandlers}
                     onDragStart={dragHandlers ? () => dragHandlers.onDragStart(t.id) : undefined}
+                    onDragEnd={dragHandlers ? () => dragHandlers.onDragEnd?.() : undefined}
                     onClick={() => onOpenTask(t)}>
                     <span className="pd-hourgrid-block-title">{t.title}</span>
                     <span className="pd-hourgrid-block-time">{formatClockTime(t.startTime)}</span>

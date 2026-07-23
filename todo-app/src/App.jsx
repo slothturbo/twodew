@@ -1420,6 +1420,21 @@ function AppShell({ userId }) {
     )));
   };
 
+  // Calendar drag-and-drop / tap-to-schedule — always sets plannedDate, never deadline
+  // (Calendar is the planning surface; the due date stays under the user's explicit
+  // control via TaskEditModal). Dropping onto a specific hour also sets startTime,
+  // preserving the task's existing block duration if it had one, else defaulting to
+  // 30 minutes; a plain day/all-day drop leaves any existing time fields untouched.
+  const scheduleTask = (taskId, plannedDate, startTime) => {
+    locateAndPatchTask(taskId, (t) => {
+      if (!startTime) return { ...t, plannedDate };
+      const toMin = (hhmm) => { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; };
+      const priorDuration = t.startTime && t.endTime ? toMin(t.endTime) - toMin(t.startTime) : 30;
+      const endMin = (toMin(startTime) + Math.max(15, priorDuration)) % (24 * 60);
+      return { ...t, plannedDate, startTime, endTime: `${pad(Math.floor(endMin / 60))}:${pad(endMin % 60)}` };
+    });
+  };
+
   // Creates a brand-new task directly in an arbitrary project (or the inbox, when
   // targetProjectId is null) — neither addInboxTask nor addTaskTitled can target an
   // arbitrary project, since each is hardcoded to one destination. Shared by quick-capture,
@@ -1909,7 +1924,8 @@ function AppShell({ userId }) {
             {screen === "calendar" && (
               <CalendarScreen projects={projects} inbox={inbox} isMobile={isMobile}
                 onOpenProject={openProject}
-                onOpenTask={(t) => setEditingTaskId(t.id)} />
+                onOpenTask={(t) => setEditingTaskId(t.id)}
+                onScheduleTask={scheduleTask} />
             )}
             {screen === "stats" && (
               <StatsScreen completionLog={completionLog} focusLog={focusLog} runningTaskId={runningTaskId} runStart={runStart} tick={tick} />
