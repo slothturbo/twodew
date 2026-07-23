@@ -960,6 +960,46 @@ button{touch-action:manipulation;}
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:35%;
 }
 
+/* ---- P4: HourGrid — day/week time-block view ---- */
+.pd-hourgrid{flex:1; min-height:0; display:flex; flex-direction:column;}
+.pd-hourgrid-headrow, .pd-hourgrid-alldayrow{display:flex; flex-shrink:0;}
+.pd-hourgrid-axis-spacer{width:52px; flex-shrink:0;}
+.pd-hourgrid-colhead{
+  flex:1; min-width:0; text-align:center; padding:6px 4px 10px; display:flex; align-items:baseline; gap:6px; justify-content:center;
+}
+.pd-hourgrid-daynum{font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:20px;}
+.pd-hourgrid-colhead.today .pd-hourgrid-daynum{color:var(--accent);}
+.pd-hourgrid-dow{font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted);}
+.pd-hourgrid-alldayrow{padding-bottom:8px; margin-bottom:4px; border-bottom:1px solid var(--line);}
+.pd-hourgrid-alldaycell{flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; padding:0 4px;}
+.pd-hourgrid-allday-chip{
+  all:unset; box-sizing:border-box; cursor:pointer; border-radius:5px; padding:4px 8px; font-size:11.5px;
+  border-left:2px solid; background:var(--card); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.pd-hourgrid-allday-chip.planned{border-left-style:dashed;}
+.pd-hourgrid-allday-chip:hover{filter:brightness(1.35);}
+.pd-hourgrid-scroll{flex:1; min-height:0; overflow-y:auto;}
+.pd-hourgrid-body{position:relative; display:flex;}
+.pd-hourgrid-axis{width:52px; flex-shrink:0; position:relative;}
+.pd-hourgrid-hourlabel{
+  position:absolute; left:0; right:8px; transform:translateY(-50%); text-align:right;
+  font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted);
+}
+.pd-hourgrid-col{flex:1; min-width:0; position:relative; border-left:1px solid var(--line);}
+.pd-hourgrid-col.today{background:rgba(255,90,31,0.04);}
+.pd-hourgrid-hourline{position:absolute; left:0; right:0; height:0; border-top:1px solid var(--line);}
+.pd-hourgrid-now{position:absolute; left:0; right:0; height:0; border-top:2px solid var(--accent); z-index:2;}
+.pd-hourgrid-block{
+  all:unset; box-sizing:border-box; position:absolute; left:4px; right:4px; cursor:pointer;
+  border-radius:5px; padding:3px 7px; border-left:2px solid; overflow:hidden; display:flex; flex-direction:column; gap:1px;
+  transition:filter .1s ease;
+}
+.pd-hourgrid-block:hover{filter:brightness(1.35);}
+.pd-hourgrid-block.planned{border-left-style:dashed;}
+.pd-hourgrid-block.overbooked{box-shadow:inset 0 0 0 1px var(--danger);}
+.pd-hourgrid-block-title{font-size:11.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.pd-hourgrid-block-time{font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--muted);}
+
 /* ---- redesign: Stats screen ---- */
 .pd-stats{flex:1; overflow-y:auto; padding:24px 32px;}
 .pd-tasks-screen{flex:1; overflow-y:auto; padding:24px 32px;}

@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
-import { todayISO, colorOf, MONTHS, DOW, taskTimeRangeLabel, monthGridCells } from "../lib/helpers";
+import { todayISO, colorOf, MONTHS, DOW, taskTimeRangeLabel, monthGridCells, pad } from "../lib/helpers";
+import { HourGrid } from "../components/HourGrid";
 
 const INBOX_COLOR = { fg: "var(--muted)", bg: "rgba(140,150,163,0.12)" };
+const dateISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 /* ------------------------------------------------------------------ */
 /*  Calendar screen — month/week/day planning surface. A task is placed  */
@@ -43,6 +45,19 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
       items: [...(byDate[c.iso] || [])].sort((a, b) => (a.startTime || "99:99").localeCompare(b.startTime || "99:99")),
     }));
   }, [view, viewY, viewM, byDate]);
+
+  // Splits a day's tasks into "all-day" (no startTime, sits in the strip above the hour
+  // axis) and "timed" (positioned as a block) — shared by day view and week view (M4).
+  const buildColumn = (date) => {
+    const iso = dateISO(date);
+    const items = byDate[iso] || [];
+    return {
+      date, iso,
+      allDay: items.filter((t) => !t.startTime),
+      timed: [...items.filter((t) => t.startTime)].sort((a, b) => a.startTime.localeCompare(b.startTime)),
+    };
+  };
+  const dayColumns = useMemo(() => (view === "day" ? [buildColumn(cursor)] : []), [view, cursor, byDate]);
 
   const nav = (delta) => {
     const d = new Date(cursor);
@@ -151,8 +166,13 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
         </>
       ))}
 
-      {(view === "week" || view === "day") && (
-        <p className="pd-empty">{view === "week" ? "Week" : "Day"} view — coming next.</p>
+      {view === "day" && (
+        <HourGrid columns={dayColumns} todayIso={todayIso} onOpenTask={openTask}
+          colorFor={(t) => t.projectColor || INBOX_COLOR} isMobile={isMobile} />
+      )}
+
+      {view === "week" && (
+        <p className="pd-empty">Week view — coming next.</p>
       )}
     </div>
   );
