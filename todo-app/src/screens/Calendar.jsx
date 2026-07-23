@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { todayISO, colorOf, MONTHS, DOW, taskTimeRangeLabel, monthGridCells, pad } from "../lib/helpers";
+import { todayISO, colorOf, MONTHS, DOW, taskTimeRangeLabel, monthGridCells, weekCells, pad } from "../lib/helpers";
 import { HourGrid } from "../components/HourGrid";
 
 const INBOX_COLOR = { fg: "var(--muted)", bg: "rgba(140,150,163,0.12)" };
@@ -59,6 +59,15 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
   };
   const dayColumns = useMemo(() => (view === "day" ? [buildColumn(cursor)] : []), [view, cursor, byDate]);
 
+  const week = useMemo(() => (view === "week" ? weekCells(cursor) : []), [view, cursor]);
+  // Week is a real 7-column HourGrid on desktop, but that's unusably cramped at phone
+  // width — mobile gets an agenda list scoped to the same 7 days instead, reusing the
+  // exact row markup the month view's mobile agenda already uses.
+  const weekColumns = useMemo(() => (view === "week" && !isMobile ? week.map((c) => buildColumn(c.date)) : []), [view, isMobile, week, byDate]);
+  const weekAgendaDays = useMemo(() => (view === "week" && isMobile
+    ? week.map((c) => ({ ...c, items: [...(byDate[c.iso] || [])].sort((a, b) => (a.startTime || "99:99").localeCompare(b.startTime || "99:99")) }))
+    : []), [view, isMobile, week, byDate]);
+
   const nav = (delta) => {
     const d = new Date(cursor);
     if (view === "month") d.setMonth(d.getMonth() + delta);
@@ -70,7 +79,11 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
 
   const openTask = (t) => (t.projectId ? onOpenProject(t.projectId) : onOpenTask(t));
 
-  const headLabel = view === "month" ? `${MONTHS[viewM]}` : cursor.toLocaleDateString(undefined, { month: "long", day: view === "day" ? "numeric" : undefined });
+  const headLabel = view === "month" ? MONTHS[viewM]
+    : view === "week" && week.length ? (week[0].date.getMonth() === week[6].date.getMonth()
+        ? `${MONTHS[week[0].date.getMonth()]} ${week[0].date.getDate()}–${week[6].date.getDate()}`
+        : `${MONTHS[week[0].date.getMonth()].slice(0, 3)} ${week[0].date.getDate()} – ${MONTHS[week[6].date.getMonth()].slice(0, 3)} ${week[6].date.getDate()}`)
+    : cursor.toLocaleDateString(undefined, { month: "long", day: "numeric" });
 
   return (
     <div className="pd-calendar">
@@ -171,9 +184,37 @@ export function CalendarScreen({ projects, inbox, isMobile, onOpenProject, onOpe
           colorFor={(t) => t.projectColor || INBOX_COLOR} isMobile={isMobile} />
       )}
 
-      {view === "week" && (
-        <p className="pd-empty">Week view — coming next.</p>
-      )}
+      {view === "week" && (isMobile ? (
+        <div className="pd-cal-agenda">
+          {weekAgendaDays.filter((c) => c.items.length > 0).map((day) => (
+            <div key={day.iso} className={`pd-cal-agenda-day ${day.iso === todayIso ? "today" : ""}`}>
+              <div className="pd-cal-agenda-date">
+                <div className="pd-cal-agenda-daynum">{day.date.getDate()}</div>
+                <div className="pd-cal-agenda-dow">{day.date.toLocaleDateString(undefined, { weekday: "short" })}</div>
+              </div>
+              <div className="pd-cal-agenda-items">
+                {day.items.map((t) => {
+                  const col = t.projectColor || INBOX_COLOR;
+                  const time = taskTimeRangeLabel(t);
+                  return (
+                    <button key={t.id} type="button" className={`pd-cal-agenda-row ${t.plannedDate ? "planned" : ""}`} style={{ borderLeftColor: col.fg }}
+                      onClick={() => openTask(t)}>
+                      <span className="pd-cal-agenda-title">{t.title}</span>
+                      <span className="pd-cal-agenda-meta">{time ? `${time} · ` : ""}{t.projectName || "Inbox"}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          {weekAgendaDays.every((c) => c.items.length === 0) && (
+            <p className="pd-empty">Nothing scheduled this week.</p>
+          )}
+        </div>
+      ) : (
+        <HourGrid columns={weekColumns} todayIso={todayIso} onOpenTask={openTask}
+          colorFor={(t) => t.projectColor || INBOX_COLOR} isMobile={isMobile} />
+      ))}
     </div>
   );
 }
