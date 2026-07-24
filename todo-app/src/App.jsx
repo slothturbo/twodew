@@ -1989,7 +1989,7 @@ function AppShell({ userId }) {
                 onScheduleTask={scheduleTask} />
             )}
             {screen === "stats" && (
-              <StatsScreen completionLog={completionLog} focusLog={focusLog} runningTaskId={runningTaskId} runStart={runStart} tick={tick} />
+              <StatsScreen projects={projects} inbox={inbox} completionLog={completionLog} focusLog={focusLog} runningTaskId={runningTaskId} runStart={runStart} tick={tick} />
             )}
             {screen === "projects" && (
       <div className="pd-body">

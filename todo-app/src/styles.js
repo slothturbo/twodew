@@ -1067,6 +1067,12 @@ button{touch-action:manipulation;}
 .pd-heatcell{aspect-ratio:1; border-radius:2px; background:var(--raised);}
 .pd-heatcell.on{background:var(--accent);}
 
+.pd-week-summary{display:flex; align-items:center; gap:28px; flex-wrap:wrap;}
+.pd-week-stat-value{font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:28px; line-height:1;}
+.pd-week-stat-label{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); margin-top:4px;}
+.pd-week-ring{display:flex; align-items:center; gap:10px; margin-left:auto;}
+.pd-week-ring-label{font-size:12px; color:var(--muted); max-width:120px; line-height:1.4;}
+
 /* ---- redesign: single-task edit modal (inbox tasks from Calendar) ---- */
 .pd-task-edit-body{display:flex; flex-direction:column; gap:16px;}
 .pd-task-edit-row{display:flex; align-items:center; gap:10px;}

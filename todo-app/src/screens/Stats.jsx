@@ -1,11 +1,15 @@
 import { useMemo } from "react";
-import { todayISO, currentStreak, weekBars, heatmapCells, formatDuration } from "../lib/helpers";
+import {
+  todayISO, currentStreak, weekBars, heatmapCells, formatDuration,
+  weeklyTotal, plannedVsCompletedThisWeek,
+} from "../lib/helpers";
+import { Ring } from "../components/Ring";
 
 /* ------------------------------------------------------------------ */
 /*  Stats screen — stat tiles + week bar chart + 28-day heatmap,        */
 /*  all read only from completionLog/focusLog (durable, deletion-safe)  */
 /* ------------------------------------------------------------------ */
-export function StatsScreen({ completionLog, focusLog, runningTaskId, runStart, tick }) {
+export function StatsScreen({ projects, inbox, completionLog, focusLog, runningTaskId, runStart, tick }) {
   const today = todayISO();
   const completedToday = completionLog[today] || 0;
   const streak = useMemo(() => currentStreak(completionLog), [completionLog]);
@@ -14,6 +18,11 @@ export function StatsScreen({ completionLog, focusLog, runningTaskId, runStart, 
   const bars = useMemo(() => weekBars(completionLog), [completionLog]);
   const maxBar = Math.max(1, ...bars.map((b) => b.value));
   const cells = useMemo(() => heatmapCells(completionLog), [completionLog]);
+  const weeklyCompleted = useMemo(() => weeklyTotal(completionLog), [completionLog]);
+  const weeklyFocus = useMemo(() => weeklyTotal(focusLog), [focusLog]);
+  const plannedVsCompleted = useMemo(() => plannedVsCompletedThisWeek(projects, inbox), [projects, inbox]);
+  const plannedPct = plannedVsCompleted.planned > 0
+    ? Math.round((plannedVsCompleted.completed / plannedVsCompleted.planned) * 100) : null;
 
   return (
     <div className="pd-stats">
@@ -29,6 +38,24 @@ export function StatsScreen({ completionLog, focusLog, runningTaskId, runStart, 
         <div className="pd-stat-tile lilac">
           <div className="pd-stat-label">Focus time</div>
           <div className="pd-stat-value">{formatDuration(focusSeconds, false) || "0m"}</div>
+        </div>
+      </div>
+
+      <div className="pd-stats-panel">
+        <div className="pd-section-label">This week</div>
+        <div className="pd-week-summary">
+          <div className="pd-week-stat">
+            <div className="pd-week-stat-value">{weeklyCompleted}</div>
+            <div className="pd-week-stat-label">completed</div>
+          </div>
+          <div className="pd-week-stat">
+            <div className="pd-week-stat-value">{formatDuration(weeklyFocus, false) || "0m"}</div>
+            <div className="pd-week-stat-label">focused</div>
+          </div>
+          <div className="pd-week-ring">
+            <Ring pct={plannedPct} color="var(--accent)" size={56} thickness={5} />
+            <div className="pd-week-ring-label">{plannedVsCompleted.completed} of {plannedVsCompleted.planned} planned done</div>
+          </div>
         </div>
       </div>
 
