@@ -15,6 +15,7 @@ import { NoteToTaskModal } from "./components/NoteToTaskModal";
 import { SyncStatus } from "./components/SyncStatus";
 import { DeferMenu } from "./components/DeferMenu";
 import { StatusPicker } from "./components/StatusPicker";
+import { FocusScreen } from "./components/FocusScreen";
 import { TodayScreen } from "./screens/Today";
 import { CalendarScreen } from "./screens/Calendar";
 import { BrainScreen } from "./screens/BrainScreen";
@@ -805,6 +806,8 @@ function AppShell({ userId }) {
   const [runningTaskId, setRunningTaskId] = useState(null);
   const [runStart, setRunStart] = useState(null);
   const [tick, setTick] = useState(0); // forces re-render for live elapsed-time display only
+  const [focusScreenOpen, setFocusScreenOpen] = useState(false); // distraction-free overlay, opened from the banner
+  const [endedSession, setEndedSession] = useState(null); // { taskId, title, projectName, seconds } while showing end-of-session choices
   const [screen, setScreen] = useState("today"); // "today" | "projects" | "calendar" | "stats" — never persisted
   const [brainInput, setBrainInput] = useState(""); // top-bar note capture (Brain screen)
   const [editingTaskId, setEditingTaskId] = useState(null); // inbox task open in the single-task editor
@@ -888,11 +891,14 @@ function AppShell({ userId }) {
     setCompletionLog(root.completionLog); completionLogRef.current = root.completionLog;
     setFocusLog(root.focusLog); focusLogRef.current = root.focusLog;
     setLastResetDate(root.lastResetDate); lastResetDateRef.current = root.lastResetDate;
-    if (root.runningTaskId && root.runStart) {
+    // A paused focus session (runningTaskId set, runStart null) must survive a reload
+    // just like a live one — only the tick interval (nothing to live-update while
+    // paused) depends on runStart being present.
+    if (root.runningTaskId) {
       setRunningTaskId(root.runningTaskId); runningTaskIdRef.current = root.runningTaskId;
-      setRunStart(root.runStart); runStartRef.current = root.runStart;
+      setRunStart(root.runStart || null); runStartRef.current = root.runStart || null;
       clearInterval(tickTimer.current);
-      tickTimer.current = setInterval(() => setTick((t) => t + 1), 1000);
+      if (root.runStart) tickTimer.current = setInterval(() => setTick((t) => t + 1), 1000);
     } else {
       setRunningTaskId(null); runningTaskIdRef.current = null;
       setRunStart(null); runStartRef.current = null;
@@ -1177,6 +1183,51 @@ function AppShell({ userId }) {
     persist();
     tickTimer.current = setInterval(() => setTick((t) => t + 1), 1000);
   }, [flushRunning, persist]);
+
+  // Pause is a companion control inside FocusScreen, distinct from Stop — the running
+  // task stays "current" (runningTaskId untouched), only runStart clears. liveTaskSeconds
+  // already falls back to the static trackedSeconds when runStart is falsy, so "paused"
+  // reads correctly everywhere for free with zero new schema.
+  const pauseFocus = useCallback(() => {
+    flushRunning();
+    clearInterval(tickTimer.current);
+    setRunStart(null); runStartRef.current = null;
+    persist();
+  }, [flushRunning, persist]);
+
+  const resumeFocus = useCallback(() => {
+    const start = Date.now();
+    setRunStart(start); runStartRef.current = start;
+    persist();
+    tickTimer.current = setInterval(() => setTick((t) => t + 1), 1000);
+  }, [persist]);
+
+  // Stop pressed from inside FocusScreen ends the session for real (unlike Pause) and
+  // surfaces what-next choices. Snapshots the task's title/project/seconds first since
+  // toggleTrack clears runningTaskId, which FocusScreen would otherwise need to still
+  // show the choice screen.
+  const endFocusSession = useCallback((taskId, title, projectName, seconds) => {
+    toggleTrack(taskId);
+    setEndedSession({ taskId, title, projectName, seconds });
+  }, [toggleTrack]);
+
+  // The roadmap's "continue / add session" pair collapses into one "Keep going" — the
+  // data model has a single cumulative trackedSeconds with no discrete-session concept,
+  // so those two would be functionally identical.
+  const focusMarkDone = useCallback(() => {
+    toggleTaskDone(endedSession.taskId);
+    setEndedSession(null);
+    setFocusScreenOpen(false);
+  }, [endedSession, toggleTaskDone]);
+  const focusKeepGoing = useCallback(() => {
+    toggleTrack(endedSession.taskId);
+    setEndedSession(null);
+  }, [endedSession, toggleTrack]);
+  const focusBackToToday = useCallback(() => {
+    setEndedSession(null);
+    setFocusScreenOpen(false);
+    setScreen("today");
+  }, []);
 
   // Top-bar quick-add target: a project-less task, visible in Today/Calendar but not the Projects grid.
   const addInboxTask = useCallback((raw) => {
@@ -1821,7 +1872,17 @@ function AppShell({ userId }) {
             <FocusBanner task={runningTask} projectName={runningProject?.name}
               seconds={liveTaskSeconds(runningTask, runningTaskId, runStart)}
               onStop={() => toggleTrack(runningTaskId)}
-              onOpen={() => (runningProject ? openProject(runningProject.id) : setScreen("today"))} />
+              onOpen={() => setFocusScreenOpen(true)} />
+          )}
+          {(focusScreenOpen || endedSession) && (
+            <FocusScreen task={runningTask} projectName={runningProject?.name}
+              seconds={runningTask ? liveTaskSeconds(runningTask, runningTaskId, runStart) : 0}
+              paused={!!runningTaskId && !runStart}
+              endedSession={endedSession}
+              onPauseResume={runStart ? pauseFocus : resumeFocus}
+              onStop={() => endFocusSession(runningTaskId, runningTask.title, runningProject?.name, liveTaskSeconds(runningTask, runningTaskId, runStart))}
+              onClose={() => setFocusScreenOpen(false)}
+              onMarkDone={focusMarkDone} onKeepGoing={focusKeepGoing} onBackToToday={focusBackToToday} />
           )}
           <div className="pd-topbar">
             {screen === "projects" ? (

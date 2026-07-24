@@ -85,6 +85,43 @@ button{touch-action:manipulation;}
 .pd-focus-stop:hover{background:rgba(0,0,0,0.28);}
 @keyframes pd-pulse{0%,100%{opacity:1;} 50%{opacity:.3;}}
 
+/* ---- FocusScreen: distraction-free overlay opened from the focus banner ---- */
+.pd-focusscreen-overlay{background:rgba(8,9,11,0.86); backdrop-filter:blur(6px);}
+.pd-focusscreen{
+  width:min(420px, 92vw); background:var(--card); border:1px solid var(--line); border-radius:20px;
+  box-shadow:var(--shadow-modal); padding:40px 32px; display:flex; flex-direction:column; align-items:center;
+  text-align:center; position:relative; animation:pd-pop .14s ease;
+}
+.pd-focusscreen-close{
+  all:unset; position:absolute; top:14px; right:16px; width:28px; height:28px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--muted); font-size:18px;
+}
+.pd-focusscreen-close:hover{background:var(--raised); color:var(--ink);}
+.pd-focusscreen-label{font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted);}
+.pd-focusscreen-title{font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:26px; margin-top:8px; line-height:1.2;}
+.pd-focusscreen-project{font-size:13px; color:var(--muted); margin-top:4px;}
+.pd-focusscreen-time{font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:42px; margin-top:28px; letter-spacing:-0.02em;}
+.pd-focusscreen-estimate{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted); margin-top:8px;}
+.pd-focusscreen-controls{display:flex; gap:10px; margin-top:32px; width:100%;}
+.pd-focusscreen-pause, .pd-focusscreen-stop{
+  all:unset; box-sizing:border-box; flex:1; text-align:center; cursor:pointer; padding:12px; border-radius:12px;
+  font-size:14px; font-weight:600;
+}
+.pd-focusscreen-pause{background:var(--accent); color:var(--accent-ink);}
+.pd-focusscreen-pause:hover{filter:brightness(1.1);}
+.pd-focusscreen-stop{border:1px solid var(--line); color:var(--ink);}
+.pd-focusscreen-stop:hover{border-color:var(--danger); color:var(--danger);}
+.pd-focusscreen-ended-title{font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:22px; line-height:1.2;}
+.pd-focusscreen-ended-time{font-family:'IBM Plex Mono',monospace; font-size:15px; color:var(--muted); margin-top:14px;}
+.pd-focusscreen-choices{display:flex; flex-direction:column; gap:8px; margin-top:28px; width:100%;}
+.pd-focusscreen-choice{
+  all:unset; box-sizing:border-box; width:100%; text-align:center; cursor:pointer; padding:12px; border-radius:12px;
+  font-size:14px; font-weight:600; border:1px solid var(--line); color:var(--ink);
+}
+.pd-focusscreen-choice:hover{border-color:var(--accent); color:var(--accent);}
+.pd-focusscreen-choice.primary{background:var(--accent); color:var(--accent-ink); border:none;}
+.pd-focusscreen-choice.primary:hover{filter:brightness(1.1); color:var(--accent-ink);}
+
 .pd-body{flex:1; display:flex; min-height:0; position:relative; overflow:hidden;}
 .pd-left{
   width:380px; min-width:320px; border-right:1px solid var(--line); overflow-y:auto; padding:16px;
