@@ -1072,6 +1072,14 @@ button{touch-action:manipulation;}
 .pd-week-stat-label{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); margin-top:4px;}
 .pd-week-ring{display:flex; align-items:center; gap:10px; margin-left:auto;}
 .pd-week-ring-label{font-size:12px; color:var(--muted); max-width:120px; line-height:1.4;}
+.pd-week-carryover{margin-top:16px; padding-top:14px; border-top:1px solid var(--line); font-size:12.5px; color:var(--muted);}
+
+.pd-projectbar-list{display:flex; flex-direction:column; gap:12px;}
+.pd-projectbar-row{display:flex; align-items:center; gap:12px;}
+.pd-projectbar-name{width:140px; flex-shrink:0; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.pd-projectbar-track{flex:1; height:8px; border-radius:4px; background:var(--raised); overflow:hidden;}
+.pd-projectbar-fill{height:100%; border-radius:4px; transition:width .5s ease;}
+.pd-projectbar-count{width:20px; flex-shrink:0; text-align:right; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted);}
 
 /* ---- redesign: single-task edit modal (inbox tasks from Calendar) ---- */
 .pd-task-edit-body{display:flex; flex-direction:column; gap:16px;}

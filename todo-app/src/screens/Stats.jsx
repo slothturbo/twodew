@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import {
   todayISO, currentStreak, weekBars, heatmapCells, formatDuration,
-  weeklyTotal, plannedVsCompletedThisWeek,
+  weeklyTotal, plannedVsCompletedThisWeek, carryoverTasks, completionByProject,
 } from "../lib/helpers";
 import { Ring } from "../components/Ring";
 
@@ -23,6 +23,9 @@ export function StatsScreen({ projects, inbox, completionLog, focusLog, runningT
   const plannedVsCompleted = useMemo(() => plannedVsCompletedThisWeek(projects, inbox), [projects, inbox]);
   const plannedPct = plannedVsCompleted.planned > 0
     ? Math.round((plannedVsCompleted.completed / plannedVsCompleted.planned) * 100) : null;
+  const carryover = useMemo(() => carryoverTasks(projects, inbox), [projects, inbox]);
+  const byProject = useMemo(() => completionByProject(projects), [projects]);
+  const maxByProject = Math.max(1, ...byProject.map((p) => p.count));
 
   return (
     <div className="pd-stats">
@@ -57,7 +60,27 @@ export function StatsScreen({ projects, inbox, completionLog, focusLog, runningT
             <div className="pd-week-ring-label">{plannedVsCompleted.completed} of {plannedVsCompleted.planned} planned done</div>
           </div>
         </div>
+        {carryover.length > 0 && (
+          <div className="pd-week-carryover">{carryover.length} task{carryover.length === 1 ? "" : "s"} carried over from earlier</div>
+        )}
       </div>
+
+      {byProject.length > 0 && (
+        <div className="pd-stats-panel">
+          <div className="pd-section-label">Completed by project this week</div>
+          <div className="pd-projectbar-list">
+            {byProject.map((p) => (
+              <div key={p.id} className="pd-projectbar-row">
+                <div className="pd-projectbar-name">{p.name}</div>
+                <div className="pd-projectbar-track">
+                  <div className="pd-projectbar-fill" style={{ width: `${(p.count / maxByProject) * 100}%`, background: p.color.fg }} />
+                </div>
+                <div className="pd-projectbar-count">{p.count}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="pd-stats-panel">
         <div className="pd-section-label">Tasks completed this week</div>
