@@ -148,8 +148,105 @@ export function heatmapCells(completionLog, days = 28) {
   return Array.from({ length: days }, (_, i) => {
     const d = new Date(today); d.setDate(today.getDate() - (days - 1 - i));
     const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    return { iso, on: (completionLog[iso] || 0) > 0 };
+    const count = completionLog[iso] || 0;
+    return { iso, on: count > 0, count };
   });
+}
+// Sums a date-keyed log (completionLog or focusLog) across the current Sun-Sat week —
+// same week boundary as weekBars/Calendar's weekCells, so "this week" means the same
+// thing everywhere in the app.
+export function weeklyTotal(log) {
+  const start = startOfWeek(new Date());
+  let sum = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    sum += log[iso] || 0;
+  }
+  return sum;
+}
+function thisWeekRangeISO() {
+  const start = startOfWeek(new Date());
+  const end = new Date(start); end.setDate(start.getDate() + 6);
+  const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return [iso(start), iso(end)];
+}
+// "Planned" here means whichever of plannedDate/deadline currently owns the task's
+// schedule (plannedDate wins when set, same precedence used everywhere else in the app)
+// — a live computation, since neither dimension is tracked in a historical log.
+export function plannedVsCompletedThisWeek(projects, inbox) {
+  const [startISO, endISO] = thisWeekRangeISO();
+  const all = [...inbox, ...projects.flatMap((p) => p.tasks)];
+  const planned = all.filter((t) => {
+    const d = t.plannedDate || t.deadline;
+    return d && d >= startISO && d <= endISO;
+  });
+  return { planned: planned.length, completed: planned.filter((t) => t.done).length };
+}
+// A live snapshot (still-open tasks whose schedule is in the past), not a historical
+// trend — there's no log of "was this still open N days after being planned."
+export function carryoverTasks(projects, inbox) {
+  const today = todayISO();
+  const all = [...inbox, ...projects.flatMap((p) => p.tasks)];
+  return all.filter((t) => {
+    if (t.done) return false;
+    const d = t.plannedDate || t.deadline;
+    return d && d < today;
+  });
+}
+// This-week completions per project, computed fresh from each task's completedAt since
+// completionLog has no project dimension. Projects with zero completions this week are
+// left out entirely — a list of "0" rows is noise, not insight.
+export function completionByProject(projects) {
+  const [startISO, endISO] = thisWeekRangeISO();
+  return projects
+    .map((p) => {
+      const count = p.tasks.filter((t) => {
+        if (!t.done || !t.completedAt) return false;
+        const iso = localDateISO(t.completedAt);
+        return iso >= startISO && iso <= endISO;
+      }).length;
+      return { id: p.id, name: p.name, color: colorOf(p), count };
+    })
+    .filter((p) => p.count > 0)
+    .sort((a, b) => b.count - a.count);
+}
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+// Average log value per weekday, counting only weeks that actually had activity that day
+// (a string of zero-days shouldn't drag down "how productive is a typical Tuesday").
+function weekdayAverages(log, weeks) {
+  const buckets = Array.from({ length: 7 }, () => ({ sum: 0, count: 0 }));
+  const d = new Date();
+  for (let i = 0; i < weeks * 7; i++) {
+    const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const val = log[iso] || 0;
+    if (val > 0) {
+      const b = buckets[d.getDay()];
+      b.sum += val; b.count += 1;
+    }
+    d.setDate(d.getDate() - 1);
+  }
+  return buckets.map((b, dow) => ({ dow, avg: b.count ? b.sum / b.count : 0, count: b.count }));
+}
+// Only surfaces a claim when one weekday is clearly ahead (>=50% over the runner-up) and
+// there's enough history behind it (>=3 non-zero occurrences) — otherwise stays silent
+// rather than asserting a pattern from noise.
+function topWeekdayObservation(log, weeks = 8, minOccurrences = 3) {
+  const qualifying = weekdayAverages(log, weeks).filter((b) => b.count >= minOccurrences);
+  if (qualifying.length < 2) return null;
+  const [top, second] = [...qualifying].sort((a, b) => b.avg - a.avg);
+  if (top.avg <= 0 || top.avg < second.avg * 1.5) return null;
+  return WEEKDAY_NAMES[top.dow];
+}
+// Two specific, defensible observation types — never an open-ended pattern generator,
+// and never phrased as a comparison to anyone but the user's own history.
+export function weekdayObservations(completionLog, focusLog) {
+  const observations = [];
+  const completionDay = topWeekdayObservation(completionLog);
+  if (completionDay) observations.push(`You complete more on ${completionDay}s.`);
+  const focusDay = topWeekdayObservation(focusLog);
+  if (focusDay) observations.push(`You focus most on ${focusDay}s.`);
+  return observations;
 }
 // Ports the mockup's quick-add regex: strip a trailing time like "5pm"/"11:30am" out of
 // the typed text into a display label, title becomes whatever's left.
