@@ -1065,7 +1065,12 @@ button{touch-action:manipulation;}
 .pd-daybar-label{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted);}
 .pd-heat-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(20px,1fr)); gap:6px;}
 .pd-heatcell{aspect-ratio:1; border-radius:2px; background:var(--raised);}
-.pd-heatcell.on{background:var(--accent);}
+.pd-heatcell.level-1{background:rgba(255,90,46,0.35);}
+.pd-heatcell.level-2{background:rgba(255,90,46,0.65);}
+.pd-heatcell.level-3{background:var(--accent);}
+
+.pd-observations{display:flex; flex-direction:column; gap:8px;}
+.pd-observation{font-size:13px; color:var(--ink);}
 
 .pd-week-summary{display:flex; align-items:center; gap:28px; flex-wrap:wrap;}
 .pd-week-stat-value{font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:28px; line-height:1;}

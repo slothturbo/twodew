@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import {
   todayISO, currentStreak, weekBars, heatmapCells, formatDuration,
-  weeklyTotal, plannedVsCompletedThisWeek, carryoverTasks, completionByProject,
+  weeklyTotal, plannedVsCompletedThisWeek, carryoverTasks, completionByProject, weekdayObservations,
 } from "../lib/helpers";
 import { Ring } from "../components/Ring";
 
@@ -26,6 +26,8 @@ export function StatsScreen({ projects, inbox, completionLog, focusLog, runningT
   const carryover = useMemo(() => carryoverTasks(projects, inbox), [projects, inbox]);
   const byProject = useMemo(() => completionByProject(projects), [projects]);
   const maxByProject = Math.max(1, ...byProject.map((p) => p.count));
+  const maxHeat = Math.max(1, ...cells.map((c) => c.count));
+  const observations = useMemo(() => weekdayObservations(completionLog, focusLog), [completionLog, focusLog]);
 
   return (
     <div className="pd-stats">
@@ -97,9 +99,24 @@ export function StatsScreen({ projects, inbox, completionLog, focusLog, runningT
       <div className="pd-stats-panel">
         <div className="pd-section-label">28-day streak</div>
         <div className="pd-heat-grid">
-          {cells.map((c) => <div key={c.iso} className={`pd-heatcell ${c.on ? "on" : ""}`} title={c.iso} />)}
+          {cells.map((c) => {
+            const level = c.count === 0 ? 0 : c.count / maxHeat <= 0.33 ? 1 : c.count / maxHeat <= 0.66 ? 2 : 3;
+            return (
+              <div key={c.iso} className={`pd-heatcell level-${level}`}
+                title={`${c.count} completed · ${c.iso}`} />
+            );
+          })}
         </div>
       </div>
+
+      {observations.length > 0 && (
+        <div className="pd-stats-panel">
+          <div className="pd-section-label">Noticed</div>
+          <div className="pd-observations">
+            {observations.map((text) => <div key={text} className="pd-observation">{text}</div>)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
