@@ -514,7 +514,7 @@ function TaskRow({ task, color, isMobile, completed, onToggle, onDelete, onTitle
         <div className="pd-task-row1">
           {!completed ? (
             <>
-              <span className="pd-drag-handle"
+              <span className="pd-drag-handle" aria-label="Drag to reorder"
                 onMouseDown={(e) => e.stopPropagation()}
                 onTouchStart={(e) => { e.stopPropagation(); touchReorderStart?.(e, task.id, rkind); }}>⠿</span>
               <div className="pd-reorder">
@@ -605,7 +605,7 @@ function TaskEditModal({ task, onClose, onTitle, onDeadline, onStartTime, onEndT
         <div className="pd-panel-header">
           <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 15 }}>Task</div>
           <div className="pd-panel-actions">
-            <button type="button" onClick={onClose} title="Close">✕</button>
+            <button type="button" onClick={onClose} title="Close" aria-label="Close">✕</button>
           </div>
         </div>
         <div className="pd-panel-body pd-task-edit-body">
@@ -711,7 +711,7 @@ function InboxReview({
         <div className="pd-panel-header">
           <div className="pd-review-progress">{clarifiedCount} of {total} clarified</div>
           <div className="pd-panel-actions">
-            <button type="button" onClick={onClose} title="Close (Esc)">✕</button>
+            <button type="button" onClick={onClose} title="Close (Esc)" aria-label="Close">✕</button>
           </div>
         </div>
         <div className="pd-panel-body pd-review-body">

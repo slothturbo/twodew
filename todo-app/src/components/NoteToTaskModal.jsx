@@ -26,7 +26,7 @@ export function NoteToTaskModal({ note, prefillTitle, projects, onCreate, onClos
         <div className="pd-panel-header">
           <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 15 }}>Create task</div>
           <div className="pd-panel-actions">
-            <button type="button" onClick={onClose} title="Close">✕</button>
+            <button type="button" onClick={onClose} title="Close" aria-label="Close">✕</button>
           </div>
         </div>
         <div className="pd-panel-body pd-task-edit-body">

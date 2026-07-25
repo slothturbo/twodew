@@ -17,7 +17,7 @@ export function Sidebar({ screen, navItems, onNavigate, projects, onOpenProject,
           </button>
         )}
         {collapsed && (
-          <button type="button" className="pd-sidebar-item pd-sidebar-search-collapsed" onClick={onOpenPalette} title="Search (⌘K)">
+          <button type="button" className="pd-sidebar-item pd-sidebar-search-collapsed" onClick={onOpenPalette} title="Search (⌘K)" aria-label="Search">
             <span className="pd-navicon pd-navicon-search" />
           </button>
         )}
@@ -26,7 +26,7 @@ export function Sidebar({ screen, navItems, onNavigate, projects, onOpenProject,
       <div className="pd-sidebar-nav">
         {navItems.map((n) => (
           <button key={n.key} type="button" className={`pd-sidebar-item ${screen === n.key ? "active" : ""}`}
-            title={n.label} onClick={() => onNavigate(n.key)}>
+            title={n.label} aria-label={n.label} onClick={() => onNavigate(n.key)}>
             <span className={`pd-navicon pd-navicon-${n.icon}`} />
             {!collapsed && <span>{n.label}</span>}
           </button>

@@ -19,12 +19,12 @@ function ToolbarButtons({ cmd }) {
 
   return (
     <>
-      <button type="button" className="b" onClick={() => cmd("bold")} title="Bold (⌘B)">B</button>
-      <button type="button" className="i" onClick={() => cmd("italic")} title="Italic (⌘I)">I</button>
-      <button type="button" className="u" onClick={() => cmd("underline")} title="Underline (⌘U)">U</button>
-      <button type="button" className="s" onClick={() => cmd("strikeThrough")} title="Strikethrough">S</button>
+      <button type="button" className="b" onClick={() => cmd("bold")} title="Bold (⌘B)" aria-label="Bold">B</button>
+      <button type="button" className="i" onClick={() => cmd("italic")} title="Italic (⌘I)" aria-label="Italic">I</button>
+      <button type="button" className="u" onClick={() => cmd("underline")} title="Underline (⌘U)" aria-label="Underline">U</button>
+      <button type="button" className="s" onClick={() => cmd("strikeThrough")} title="Strikethrough" aria-label="Strikethrough">S</button>
       <div className="pd-aa-wrap" ref={wrapRef}>
-        <button type="button" onClick={() => setAaOpen((o) => !o)} title="Text style" style={{ width: "auto", padding: "0 8px" }}>Aa</button>
+        <button type="button" onClick={() => setAaOpen((o) => !o)} title="Text style" aria-label="Text style" style={{ width: "auto", padding: "0 8px" }}>Aa</button>
         {aaOpen && (
           <div className="pd-aa-menu">
             <button type="button" className="pd-aa-title" onClick={() => setBlock("H2")}>Title</button>
@@ -35,7 +35,7 @@ function ToolbarButtons({ cmd }) {
           </div>
         )}
       </div>
-      <button type="button" onClick={() => cmd("insertUnorderedList")} title="Bulleted list">•—</button>
+      <button type="button" onClick={() => cmd("insertUnorderedList")} title="Bulleted list" aria-label="Bulleted list">•—</button>
     </>
   );
 }
@@ -172,7 +172,7 @@ export function Bubble({ note, color, isMobile, onSave, onDelete, onCreateTask, 
         onDrop={handleBubbleDrop} onDragEnd={dragProps?.onDragEnd}
         onClick={() => setPanelOpen(true)}>
         {reorderable && (
-          <span className="pd-drag-handle"
+          <span className="pd-drag-handle" aria-label="Drag to reorder"
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => { e.stopPropagation(); touchReorderStart?.(e, note.id, "note"); }}>⠿</span>
         )}
@@ -197,11 +197,11 @@ export function Bubble({ note, color, isMobile, onSave, onDelete, onCreateTask, 
               </div>
               <div className="pd-panel-actions">
                 {onCreateTask && (
-                  <button type="button" onClick={createTask} title="Create task from this note">✚</button>
+                  <button type="button" onClick={createTask} title="Create task from this note" aria-label="Create task from this note">✚</button>
                 )}
                 <button type="button" onClick={() => setFullscreen((f) => !f)}
-                  title={fullscreen ? "Exit full screen" : "Full screen"}>{fullscreen ? "⤡" : "⤢"}</button>
-                <button type="button" onClick={commitPanel} title="Save & close">✕</button>
+                  title={fullscreen ? "Exit full screen" : "Full screen"} aria-label={fullscreen ? "Exit full screen" : "Full screen"}>{fullscreen ? "⤡" : "⤢"}</button>
+                <button type="button" onClick={commitPanel} title="Save & close" aria-label="Save & close">✕</button>
               </div>
             </div>
             <div className="pd-panel-body"
@@ -214,7 +214,7 @@ export function Bubble({ note, color, isMobile, onSave, onDelete, onCreateTask, 
                 onPaste={handlePlainPaste} onKeyDown={panelKeyDown} />
             </div>
             {!fullscreen && (
-              <div className="pd-resize-handle" onMouseDown={onResizeStart} onTouchStart={onResizeStart}>
+              <div className="pd-resize-handle" aria-label="Resize panel" onMouseDown={onResizeStart} onTouchStart={onResizeStart}>
                 <span />
               </div>
             )}
