@@ -52,6 +52,11 @@ input, textarea, select, [contenteditable], .pd-bubble-content{
 ::selection{background:var(--accent); color:var(--accent-ink);}
 ::placeholder{color:var(--muted); opacity:.7;}
 button{touch-action:manipulation;}
+/* Fallback focus ring for any plain button with no more-specific :focus-visible rule
+   of its own (icon-only buttons like drag handles, priority dots, track pills, tab bar,
+   etc.) — every existing class+pseudo rule (.pd-btn:focus-visible etc.) outranks this by
+   specificity, so this only fills gaps rather than overriding anything. */
+button:focus-visible{box-shadow:var(--focus-ring); outline:none;}
 .pd-press:active{transform:scale(.97); filter:brightness(1.15);}
 
 .pd-topbar{
@@ -297,6 +302,7 @@ button{touch-action:manipulation;}
 .pd-check.done svg{opacity:1;}
 .pd-task-title{flex:1; min-width:0; font-size:16px; border:none; background:transparent; color:var(--ink); font-family:'Plus Jakarta Sans',sans-serif; padding:4px 0;}
 .pd-task-title:focus{outline:none;}
+.pd-task-title:focus-visible{box-shadow:var(--focus-ring); border-radius:4px;}
 .pd-task-title.done{color:var(--muted); text-decoration:line-through;}
 .pd-task-due{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); white-space:nowrap;}
 .pd-task-tracked{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); white-space:nowrap;}
@@ -409,6 +415,7 @@ button{touch-action:manipulation;}
   font-size:15px; font-family:'Plus Jakarta Sans',sans-serif; color:var(--ink); line-height:1.65; min-height:100%;
 }
 .pd-panel-edit:focus{outline:none;}
+.pd-panel-edit:focus-visible{box-shadow:var(--focus-ring); border-radius:4px;}
 .pd-panel-edit h2{font-family:'Plus Jakarta Sans',sans-serif; font-size:23px; font-weight:800; margin:6px 0 2px;}
 .pd-panel-edit h3{font-family:'Plus Jakarta Sans',sans-serif; font-size:19px; margin:4px 0;}
 .pd-panel-edit h4{font-family:'Plus Jakarta Sans',sans-serif; font-size:16px; font-weight:600; margin:4px 0 2px; color:var(--muted);}
@@ -1106,6 +1113,7 @@ button{touch-action:manipulation;}
   width:100%; padding:16px 18px; font-size:15px; font-family:'Plus Jakarta Sans',sans-serif;
   border:none; border-bottom:1px solid var(--line); background:transparent; color:var(--ink); outline:none;
 }
+.pd-palette-input:focus-visible{box-shadow:inset var(--focus-ring);}
 .pd-palette-results{max-height:min(420px, 60vh); overflow-y:auto; padding:6px;}
 .pd-palette-empty{padding:20px; text-align:center; color:var(--muted); font-size:13px;}
 .pd-palette-row{
