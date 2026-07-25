@@ -613,13 +613,12 @@ button{touch-action:manipulation;}
   .pd-drag-handle{padding:6px 2px; margin:-6px 0;}
   .pd-quickadd-row{margin-top:16px;}
   .pd-inputrow{margin-top:0;}
-  /* Zoom is disabled app-wide (see zoom-lock effect), so fields no longer need to
-     stay at 16px purely to dodge iOS auto-zoom — task titles get a touch smaller
-     for density; comfortable typing fields (name/notes/etc) stay at 16px. */
+  /* Every editable field stays at 16px — iOS auto-zooms the viewport on focus for
+     anything smaller, and pinch-zoom is user-controlled again (not locked app-wide),
+     so there's no other mechanism dodging that behavior anymore. */
   input[type=text], input[type=email], input[type=date], input[type=number],
   textarea, select, [contenteditable]{font-size:16px !important;}
   .pd-bubble-edit, .pd-panel-edit, .pd-proj-name{font-size:16px !important;}
-  .pd-task-title{font-size:15px !important;}
   /* bottom sheet note editor */
   .pd-overlay{align-items:flex-end; padding:0;}
   .pd-panel{width:100%; max-width:100%; border-radius:16px 16px 0 0; border-left:none; border-right:none; border-bottom:none; animation:pd-sheet-in .22s cubic-bezier(.2,.8,.2,1);}

@@ -828,17 +828,6 @@ function AppShell({ userId }) {
   const isMobile = useIsMobile();
   const greeting = useGreeting(); // Timezone-aware dynamic greeting for Today screen
 
-  // Lock zoom for a native-app feel. Note for accessibility: this removes the
-  // user's ability to pinch-zoom text, which WCAG normally recommends against —
-  // acceptable tradeoff here since every field already renders at 16px+.
-  useEffect(() => {
-    let meta = document.querySelector('meta[name="viewport"]');
-    const prev = meta ? meta.getAttribute("content") : null;
-    if (!meta) { meta = document.createElement("meta"); meta.name = "viewport"; document.head.appendChild(meta); }
-    meta.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover");
-    return () => { if (prev !== null) meta.setAttribute("content", prev); };
-  }, []);
-
   const kbInset = useKeyboardInset();
   const saveTimer = useRef(null);
   const toastTimer = useRef(null);
