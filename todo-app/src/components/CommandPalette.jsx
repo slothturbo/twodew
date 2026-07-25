@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { colorOf } from "../lib/helpers";
+import { useFocusTrap } from "../lib/hooks";
 
 const SCREEN_RESULTS = [
   { key: "today", label: "Today" },
@@ -16,6 +17,11 @@ export function CommandPalette({ open, onClose, projects, inbox, onNavigateScree
   const [query, setQuery] = useState("");
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef(null);
+  const panelRef = useRef(null);
+  // Tab-trapping + return-focus-on-close via the shared hook; Escape is also handled
+  // here (document-level) instead of only in the input's own onKeyDown, so it still
+  // works if focus is ever moved off the input.
+  useFocusTrap(panelRef, open, onClose);
 
   useEffect(() => {
     if (open) {
@@ -66,14 +72,14 @@ export function CommandPalette({ open, onClose, projects, inbox, onNavigateScree
     if (e.key === "ArrowDown") { e.preventDefault(); setActiveIdx((i) => Math.min(results.length - 1, i + 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIdx((i) => Math.max(0, i - 1)); }
     else if (e.key === "Enter") { e.preventDefault(); select(results[activeIdx]); }
-    else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+    // Escape is handled by useFocusTrap at the document level, not here.
   };
 
   if (!open) return null;
 
   return (
     <div className="pd-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="pd-panel pd-palette-panel" role="dialog" aria-modal="true" aria-label="Command palette">
+      <div ref={panelRef} className="pd-panel pd-palette-panel" role="dialog" aria-modal="true" aria-label="Command palette">
         <input ref={inputRef} className="pd-palette-input" value={query} onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown} placeholder="Search or jump to…" aria-label="Command palette search" />
         <div className="pd-palette-results">

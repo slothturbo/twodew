@@ -5,7 +5,7 @@ import { mergeWorkspace } from "./lib/merge";
 import { supabase } from "./supabaseClient";
 import { css } from "./styles";
 import { textToHtml, htmlToPlain, imageFileToDataURL, sanitizeHtml } from "./lib/html";
-import { useIsMobile, useKeyboardInset, useGreeting } from "./lib/hooks";
+import { useIsMobile, useKeyboardInset, useGreeting, useFocusTrap } from "./lib/hooks";
 import { Ring, ProgressFill } from "./components/Ring";
 import { Bubble } from "./components/Bubble";
 import { CommandPalette } from "./components/CommandPalette";
@@ -599,9 +599,11 @@ function FocusBanner({ task, projectName, seconds, onStop, onOpen }) {
 /*  which have no project page of their own to land on.                 */
 /* ------------------------------------------------------------------ */
 function TaskEditModal({ task, onClose, onTitle, onDeadline, onStartTime, onEndTime, onPlannedDate, onCyclePriority, onToggleRecurring, onToggleDone, onDelete, onOpenDefer, onOpenSourceNote }) {
+  const panelRef = useRef(null);
+  useFocusTrap(panelRef, true, onClose);
   return (
     <div className="pd-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="pd-panel" role="dialog" aria-modal="true" aria-label="Task details" style={{ height: "auto" }}>
+      <div ref={panelRef} className="pd-panel" role="dialog" aria-modal="true" aria-label="Task details" style={{ height: "auto" }}>
         <div className="pd-panel-header">
           <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 15 }}>Task</div>
           <div className="pd-panel-actions">
@@ -670,6 +672,8 @@ function InboxReview({
 
   const currentId = ids[idx];
   const current = tasks.find((t) => t.id === currentId);
+  const panelRef = useRef(null);
+  useFocusTrap(panelRef, true, onClose);
 
   const advance = (wasClarified) => {
     if (wasClarified) setClarifiedCount((c) => c + 1);
@@ -696,7 +700,7 @@ function InboxReview({
       else if (e.key === "2") { onSetPriority(currentId, "med"); advance(true); }
       else if (e.key === "3") { onSetPriority(currentId, "high"); advance(true); }
       else if (e.key === "Backspace") { e.preventDefault(); onDelete(current); advance(true); }
-      else if (e.key === "Escape") onClose();
+      // Escape is handled by useFocusTrap, not here.
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -707,7 +711,7 @@ function InboxReview({
 
   return (
     <div className="pd-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="pd-panel pd-review-panel" role="dialog" aria-modal="true" aria-label="Inbox review">
+      <div ref={panelRef} className="pd-panel pd-review-panel" role="dialog" aria-modal="true" aria-label="Inbox review">
         <div className="pd-panel-header">
           <div className="pd-review-progress">{clarifiedCount} of {total} clarified</div>
           <div className="pd-panel-actions">

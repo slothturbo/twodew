@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { escapeHtml, sanitizeHtml, htmlToPlain, htmlToFirstLine, imageFileToDataURL } from "../lib/html";
-import { useKeyboardInset } from "../lib/hooks";
+import { useKeyboardInset, useFocusTrap } from "../lib/hooks";
 
 /* ------------------------------------------------------------------ */
 /*  Rich-text toolbar with Aa style menu                               */
@@ -58,8 +58,8 @@ export function Bubble({ note, color, isMobile, onSave, onDelete, onCreateTask, 
   const [fullscreen, setFullscreen] = useState(false);
   const [panelHeight, setPanelHeight] = useState(DEFAULT_PANEL_H);
   const panelRef = useRef(null);
+  const dialogRef = useRef(null);
   const dragState = useRef(null);
-  const prevFocus = useRef(null);
   const kb = useKeyboardInset();
   const isLong = htmlToPlain(note.text).length > 160 || /<img/i.test(note.text);
   // Reorder affordances only make sense where a reorderable list exists (per-project view).
@@ -67,7 +67,6 @@ export function Bubble({ note, color, isMobile, onSave, onDelete, onCreateTask, 
 
   useEffect(() => {
     if (panelOpen && panelRef.current) {
-      prevFocus.current = document.activeElement;
       panelRef.current.innerHTML = note.text;
       // Desktop: jump straight into editing. Mobile: open the sheet calmly first —
       // autofocus would summon the keyboard mid-animation and shove the sheet off-screen.
@@ -81,10 +80,7 @@ export function Bubble({ note, color, isMobile, onSave, onDelete, onCreateTask, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelOpen]);
 
-  const close = () => {
-    setPanelOpen(false); setFullscreen(false);
-    if (prevFocus.current && prevFocus.current.focus) prevFocus.current.focus();
-  };
+  const close = () => { setPanelOpen(false); setFullscreen(false); };
   const commitPanel = () => {
     const raw = panelRef.current ? panelRef.current.innerHTML : note.text;
     const clean = sanitizeHtml(raw);
@@ -92,6 +88,11 @@ export function Bubble({ note, color, isMobile, onSave, onDelete, onCreateTask, 
     close();
   };
   const cancelPanel = () => close(); // Esc = discard changes
+
+  // Tab-trap/Escape/return-focus via the shared hook — initial focus stays bespoke
+  // above (desktop jumps into editing with the cursor placed at the end; mobile opens
+  // calmly without autofocus, which would summon the keyboard mid-animation).
+  useFocusTrap(dialogRef, panelOpen, cancelPanel, { skipInitialFocus: true });
 
   const panelCmd = (name, val = null) => { document.execCommand(name, false, val); panelRef.current && panelRef.current.focus(); };
 
@@ -186,7 +187,7 @@ export function Bubble({ note, color, isMobile, onSave, onDelete, onCreateTask, 
       {panelOpen && (
         <div className="pd-overlay" style={isMobile ? { paddingBottom: kb } : undefined}
           onMouseDown={(e) => { if (e.target === e.currentTarget) commitPanel(); }}>
-          <div className={`pd-panel ${fullscreen ? "fullscreen" : ""}`} role="dialog" aria-modal="true" aria-label="Edit note"
+          <div ref={dialogRef} className={`pd-panel ${fullscreen ? "fullscreen" : ""}`} role="dialog" aria-modal="true" aria-label="Edit note"
             style={{
               ...(!fullscreen ? { height: panelHeight } : {}),
               ...(isMobile ? { maxHeight: `calc(100dvh - ${kb + 8}px)` } : {}),

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useFocusTrap } from "../lib/hooks";
 
 const LABEL = { saving: "saving…", saved: "saved", offline: "offline", conflict: "sync conflict" };
 
@@ -9,6 +10,8 @@ const LABEL = { saving: "saving…", saved: "saved", offline: "offline", conflic
 export function SyncStatus({ state, note, conflicts = [], onResolveConflict }) {
   const [open, setOpen] = useState(false);
   const hasConflicts = conflicts.length > 0;
+  const panelRef = useRef(null);
+  useFocusTrap(panelRef, open && hasConflicts, () => setOpen(false));
 
   return (
     <div className="pd-sync-wrap">
@@ -21,7 +24,7 @@ export function SyncStatus({ state, note, conflicts = [], onResolveConflict }) {
       </button>
 
       {open && hasConflicts && (
-        <div className="pd-sync-panel" role="dialog" aria-label="Sync conflicts">
+        <div ref={panelRef} className="pd-sync-panel" role="dialog" aria-label="Sync conflicts">
           <div className="pd-sync-panel-head">
             <span>{conflicts.length} item{conflicts.length !== 1 ? "s" : ""} need review</span>
             <button type="button" onClick={() => setOpen(false)} aria-label="Close">✕</button>

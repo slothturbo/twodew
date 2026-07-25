@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 /* ------------------------------------------------------------------ */
 /*  Hooks: mobile detection + on-screen keyboard inset                 */
@@ -70,6 +70,55 @@ export function useGreeting() {
   }, []);
 
   return greeting;
+}
+
+const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]';
+
+// Shared focus-trap for real dialogs (role="dialog" overlays, not lightweight anchored
+// popovers): moves focus in on open, cycles Tab/Shift+Tab at the boundary instead of
+// letting it escape to the page behind, closes on Escape, and returns focus to whatever
+// was focused before the dialog opened. `ref` should point at the dialog's outermost
+// element; `onEscape` is optional (omit for a dialog that shouldn't close on Escape).
+// Pass `{ skipInitialFocus: true }` when the dialog already does its own bespoke
+// initial-focus (e.g. Bubble's desktop-only cursor-placement into its editor) — the
+// trap/Escape/return-focus behavior still applies, just not the generic "focus the
+// first focusable element" step, which would otherwise fight a deliberate custom one.
+export function useFocusTrap(ref, isOpen, onEscape, { skipInitialFocus = false } = {}) {
+  const triggerRef = useRef(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    triggerRef.current = document.activeElement;
+    // Reads ref.current fresh on every call (not captured once) so this stays correct
+    // if the dialog's own content swaps out while it stays open — e.g. FocusScreen's
+    // live view being replaced by its end-of-session choice screen without isOpen
+    // itself ever going false.
+    const focusables = () => Array.from(ref.current?.querySelectorAll(FOCUSABLE_SELECTOR) || [])
+      .filter((el) => el.offsetParent !== null || el === document.activeElement);
+    if (!skipInitialFocus) {
+      const first = focusables()[0];
+      (first || ref.current)?.focus();
+    }
+
+    const onKeyDown = (e) => {
+      // A component-level handler (e.g. Bubble's Tab-hijack for indentation, or an
+      // input's own Enter-submit) already claimed this key — don't also act on it.
+      if (e.defaultPrevented) return;
+      if (e.key === "Escape" && onEscape) { e.preventDefault(); onEscape(); return; }
+      if (e.key !== "Tab") return;
+      const els = focusables();
+      if (!els.length) return;
+      const firstEl = els[0], lastEl = els[els.length - 1];
+      if (e.shiftKey && document.activeElement === firstEl) { e.preventDefault(); lastEl.focus(); }
+      else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); firstEl.focus(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (triggerRef.current && document.contains(triggerRef.current)) triggerRef.current.focus();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 }
 
 // Local development monitor hook - monitors localhost build performance

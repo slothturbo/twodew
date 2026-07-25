@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { htmlToLines } from "../lib/html";
+import { useFocusTrap } from "../lib/hooks";
 
 // "Create task" dialog opened from a Brain/project note — title pre-filled by the
 // caller (selection or first line), pick a destination (inbox or a project), and
@@ -12,6 +13,8 @@ export function NoteToTaskModal({ note, prefillTitle, projects, onCreate, onClos
 
   const otherLines = useMemo(() => htmlToLines(note.text).slice(1), [note.text]);
   const canExtract = otherLines.length >= 2;
+  const panelRef = useRef(null);
+  useFocusTrap(panelRef, true, onClose);
 
   const submit = () => {
     const clean = title.trim();
@@ -22,7 +25,7 @@ export function NoteToTaskModal({ note, prefillTitle, projects, onCreate, onClos
 
   return (
     <div className="pd-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="pd-panel" role="dialog" aria-modal="true" aria-label="Create task from note" style={{ height: "auto" }}>
+      <div ref={panelRef} className="pd-panel" role="dialog" aria-modal="true" aria-label="Create task from note" style={{ height: "auto" }}>
         <div className="pd-panel-header">
           <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 15 }}>Create task</div>
           <div className="pd-panel-actions">
