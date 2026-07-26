@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { forwardRef, useMemo, useState } from "react";
 import { parseCapture } from "../lib/capture";
 import { fmtDate, todayISO, tomorrowISO, PRIORITY_COLOR } from "../lib/helpers";
 
@@ -12,7 +12,7 @@ function relativeDateLabel(iso) {
 // previewing every detected field before commit. Each chip is dismissable (click to
 // discard that one field, in case of a false-positive parse). A task/note mode pill
 // lets the user override parseCapture's own note:/idea: prefix detection.
-export function CaptureBar({ projects, onCommitTask, onCommitNote, placeholder }) {
+export const CaptureBar = forwardRef(function CaptureBar({ projects, onCommitTask, onCommitNote, placeholder }, ref) {
   const [text, setText] = useState("");
   const [modeOverride, setModeOverride] = useState(null); // null | "task" | "note"
   const [dismissed, setDismissed] = useState(() => new Set());
@@ -70,7 +70,7 @@ export function CaptureBar({ projects, onCommitTask, onCommitNote, placeholder }
           title={effectiveMode === "task" ? "Capturing a task — click for a note" : "Capturing a note — click for a task"}>
           {effectiveMode === "task" ? "task" : "note"}
         </button>
-        <input className="pd-topbar-quickadd" placeholder={placeholder}
+        <input ref={ref} className="pd-topbar-quickadd" placeholder={placeholder}
           value={text} onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") commit();
@@ -90,4 +90,4 @@ export function CaptureBar({ projects, onCommitTask, onCommitNote, placeholder }
       )}
     </div>
   );
-}
+});

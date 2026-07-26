@@ -844,6 +844,7 @@ button:focus-visible{box-shadow:var(--focus-ring); outline:none;}
   transition:background var(--dur-fast) ease;
 }
 .pd-today-row:hover{background:var(--raised);}
+.pd-today-row.keyboard-selected{background:var(--raised); box-shadow:inset var(--focus-ring);}
 .pd-today-info{flex:1; min-width:0;}
 .pd-today-title{font-size:14.5px;}
 .pd-today-title.done{color:var(--muted); text-decoration:line-through;}

@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState } from "react";
+import { useRef, useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { DeferMenu } from "../components/DeferMenu";
 import { MoveMenu } from "../components/MoveMenu";
@@ -28,7 +28,7 @@ function TaskMenu({ x, y, onEdit, onDefer, onDelete, onClose }) {
   );
 }
 
-function TodayTaskRow({ task, running, liveSeconds, onToggle, onCyclePriority, onToggleTrack, onOpenMenu, onOpenProject, onOpenTask }) {
+function TodayTaskRow({ task, running, liveSeconds, selected, rowRef, onToggle, onCyclePriority, onToggleTrack, onOpenMenu, onOpenProject, onOpenTask }) {
   const trackLabel = formatDuration(liveSeconds, running);
   const subtaskLabel = task.subtasks && task.subtasks.length
     ? `${task.subtasks.filter(Boolean).length}/${task.subtasks.length} subtasks` : null;
@@ -48,7 +48,7 @@ function TodayTaskRow({ task, running, liveSeconds, onToggle, onCyclePriority, o
   };
 
   return (
-    <li className="pd-today-row"
+    <li ref={rowRef} className={`pd-today-row ${selected ? "keyboard-selected" : ""}`}
       onTouchStart={(e) => { const t = e.touches[0]; startPress(t.clientX, t.clientY); }}
       onTouchMove={(e) => { const t = e.touches[0]; movePress(t.clientX, t.clientY); }}
       onTouchEnd={clearPress}
@@ -104,6 +104,8 @@ function TaskSection({ label, tasks, collapsible, open, onToggleOpen, ...rowProp
             <TodayTaskRow key={t.id} task={t}
               running={rowProps.runningTaskId === t.id}
               liveSeconds={liveTaskSeconds(t, rowProps.runningTaskId, rowProps.runStart)}
+              selected={rowProps.selectedTaskId === t.id}
+              rowRef={(el) => rowProps.registerRowRef(t.id, el)}
               onToggle={() => rowProps.onToggle(t.id)}
               onCyclePriority={() => rowProps.onCyclePriority(t.id)}
               onToggleTrack={() => rowProps.onToggleTrack(t.id)}
@@ -147,6 +149,9 @@ export function TodayScreen({
   const [deferMenu, setDeferMenu] = useState(null); // { task, x, y }
   const [moveMenu, setMoveMenu] = useState(null); // { task, x, y }
   const [doneOpen, setDoneOpen] = useState(false); // collapsed by default
+  const [selectedTaskId, setSelectedTaskId] = useState(null); // keyboard row selection
+  const rowRefs = useRef({});
+  const registerRowRef = (id, el) => { if (el) rowRefs.current[id] = el; else delete rowRefs.current[id]; };
 
   // Master focus control: stops whatever's running, or — if nothing is — starts the
   // suggested next-up task, so there's always one obvious button to jump into focus.
@@ -162,10 +167,56 @@ export function TodayScreen({
     setMoveMenu({ task, x: r.left, y: r.bottom + 6 });
   };
 
+  // Same top-to-bottom order as what's actually rendered — nextUp's own hero row,
+  // then the Now/Later-today/Done-today sections (only Done's when expanded).
+  // Deliberately excludes the Upcoming list below, which is deadline info only, not
+  // a fully-actionable row (no defer/track).
+  const selectableTasks = useMemo(
+    () => [nextUp, ...now, ...laterToday, ...(doneOpen ? doneToday : [])].filter(Boolean),
+    [nextUp, now, laterToday, doneToday, doneOpen]
+  );
+
+  // Keyboard shortcuts: Up/Down move a selection through the list above, Enter opens
+  // it, Space completes it, D defers it (anchored to the row's own DOM node — same
+  // openDefer signature the click path already uses, just fed a ref instead of a
+  // click event), F toggles focus tracking on it. Suppressed while typing or while
+  // any of this screen's own popovers/menus are open.
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = e.target.tagName;
+      const typing = tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable;
+      if (typing || menu || deferMenu || moveMenu) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (!selectableTasks.length) return;
+        e.preventDefault();
+        setSelectedTaskId((id) => {
+          const idx = selectableTasks.findIndex((t) => t.id === id);
+          const delta = e.key === "ArrowDown" ? 1 : -1;
+          const next = idx === -1
+            ? (e.key === "ArrowDown" ? 0 : selectableTasks.length - 1)
+            : Math.max(0, Math.min(selectableTasks.length - 1, idx + delta));
+          return selectableTasks[next].id;
+        });
+        return;
+      }
+      const selected = selectableTasks.find((t) => t.id === selectedTaskId);
+      if (!selected) return;
+      if (e.key === "Enter") { e.preventDefault(); (selected.projectId ? onOpenProject(selected.projectId) : onOpenTask(selected)); }
+      else if (e.key === " ") { e.preventDefault(); onToggle(selected.id); }
+      else if (e.key.toLowerCase() === "d" && !selected.recurring) {
+        e.preventDefault();
+        const el = rowRefs.current[selected.id];
+        if (el) openDefer(selected, el);
+      } else if (e.key.toLowerCase() === "f") { e.preventDefault(); onToggleTrack(selected.id); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectableTasks, selectedTaskId, menu, deferMenu, moveMenu, onOpenProject, onOpenTask, onToggle, onToggleTrack]);
+
   const rowProps = {
     runningTaskId, runStart, onToggle, onCyclePriority, onToggleTrack,
     onOpenMenu: (task, pos) => setMenu({ task, x: pos.x, y: pos.y }),
-    onOpenProject, onOpenTask,
+    onOpenProject, onOpenTask, selectedTaskId, registerRowRef,
   };
 
   return (
@@ -205,6 +256,8 @@ export function TodayScreen({
               <TodayTaskRow key={nextUp.id} task={nextUp}
                 running={runningTaskId === nextUp.id}
                 liveSeconds={liveTaskSeconds(nextUp, runningTaskId, runStart)}
+                selected={selectedTaskId === nextUp.id}
+                rowRef={(el) => registerRowRef(nextUp.id, el)}
                 onToggle={() => onToggle(nextUp.id)}
                 onCyclePriority={() => onCyclePriority(nextUp.id)}
                 onToggleTrack={() => onToggleTrack(nextUp.id)}

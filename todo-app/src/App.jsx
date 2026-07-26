@@ -838,6 +838,8 @@ function AppShell({ userId }) {
   const importFileRef = useRef(null);
   const searchRef = useRef(null);
   const quickAddRef = useRef(null);
+  const captureRef = useRef(null); // topbar CaptureBar input (today/tasks/calendar/insights)
+  const brainInputRef = useRef(null); // topbar note-capture input (Brain screen only)
   const selectedIdRef = useRef(null);
   const touchDrag = useRef(null);
   const tickTimer = useRef(null);
@@ -1811,7 +1813,16 @@ function AppShell({ userId }) {
       if (typing || modalOpenRef.current) return;
       if (e.key === "/") { e.preventDefault(); searchRef.current?.focus(); }
       if (e.key === "n" && selectedIdRef.current) { e.preventDefault(); quickAddRef.current?.focus(); }
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      // Capture — focuses whichever quick-add input is actually mounted for the
+      // current screen (Brain has its own plain input; every other screen shares CaptureBar).
+      if (e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        (screen === "brain" ? brainInputRef : captureRef).current?.focus();
+      }
+      // Scoped to the Projects screen — Today has its own arrow-key task selection
+      // below, and without this guard both fired off the same keypress regardless of
+      // which screen was actually showing.
+      if (screen === "projects" && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
         e.preventDefault();
         const list = filtered;
         if (!list.length) return;
@@ -1822,7 +1833,7 @@ function AppShell({ userId }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [filtered]);
+  }, [filtered, screen]);
 
   /* ---- render ---- */
   if (!loaded) {
@@ -1892,7 +1903,7 @@ function AppShell({ userId }) {
               <>
                 <div className="pd-title">{SCREEN_TITLES[screen]}<span>.</span></div>
                 <div className="pd-topbar-quickadd-wrap">
-                  <input className="pd-topbar-quickadd" placeholder="Capture a thought and press Enter…"
+                  <input ref={brainInputRef} className="pd-topbar-quickadd" placeholder="Capture a thought and press Enter…"
                     value={brainInput} onChange={(e) => setBrainInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && addStandaloneNote(brainInput)) setBrainInput(""); }} />
                 </div>
@@ -1904,7 +1915,7 @@ function AppShell({ userId }) {
                   {screen === "today" ? greeting : <>{SCREEN_TITLES[screen]}<span>.</span></>}
                 </div>
                 <div className="pd-topbar-quickadd-wrap">
-                  <CaptureBar projects={projects} onCommitTask={commitCapturedTask} onCommitNote={commitCapturedNote}
+                  <CaptureBar ref={captureRef} projects={projects} onCommitTask={commitCapturedTask} onCommitNote={commitCapturedNote}
                     placeholder='Add a task…  try "call mom tomorrow 5pm !high #kitchen"' />
                 </div>
                 <div className="pd-topbar-date">{longDateToday}</div>
