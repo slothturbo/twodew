@@ -28,6 +28,15 @@ export function StatsScreen({ projects, inbox, completionLog, focusLog, runningT
   const maxByProject = Math.max(1, ...byProject.map((p) => p.count));
   const maxHeat = Math.max(1, ...cells.map((c) => c.count));
   const observations = useMemo(() => weekdayObservations(completionLog, focusLog), [completionLog, focusLog]);
+  const isEmpty = Object.keys(completionLog).length === 0 && Object.keys(focusLog).length === 0;
+
+  if (isEmpty) {
+    return (
+      <div className="pd-stats">
+        <p className="pd-empty">Nothing tracked yet. Complete a task or run a focus session and your stats will show up here.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="pd-stats">

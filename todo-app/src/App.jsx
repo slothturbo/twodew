@@ -1078,7 +1078,16 @@ function AppShell({ userId }) {
     };
     updateTemplates((ts) => [...ts, template]);
   };
-  const deleteTemplate = (id) => updateTemplates((ts) => ts.filter((t) => t.id !== id));
+  const deleteTemplate = (id) => {
+    const idx = templates.findIndex((t) => t.id === id);
+    const tpl = templates[idx];
+    if (!tpl) return;
+    updateTemplates((ts) => ts.filter((t) => t.id !== id));
+    showUndo(`Deleted "${tpl.name}"`, () => updateTemplates((ts) => {
+      const next = [...ts]; next.splice(Math.min(idx, next.length), 0, tpl);
+      return next;
+    }));
+  };
 
   // ---- generalized note lookup: a note can be standalone or live in any project ----
   const locateAndPatchNote = useCallback((noteId, fn) => {
