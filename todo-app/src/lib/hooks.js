@@ -120,34 +120,3 @@ export function useFocusTrap(ref, isOpen, onEscape, { skipInitialFocus = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 }
-
-// Local development monitor hook - monitors localhost build performance
-export function useLocalMonitor() {
-  const [buildTime, setBuildTime] = useState(null);
-  const [memoryUsage, setMemoryUsage] = useState(null);
-
-  useEffect(() => {
-    if (import.meta.env.DEV) {
-      // Log startup info for localhost monitoring
-      console.log("[Twodew Local Monitor]", new Date().toISOString());
-      console.log("Local URL:", window.location.href);
-
-      // Measure build/performance time
-      const perfEntries = performance.getEntriesByType('navigation');
-      if (perfEntries.length > 0 && perfEntries[0].loadEventEnd) {
-        setBuildTime(perfEntries[0].loadEventEnd - perfEntries[0].loadEventStart);
-      }
-
-      // Try to get memory usage (Chrome/Edge only)
-      if (performance.memory) {
-        const mem = performance.memory;
-        setMemoryUsage({
-          used: Math.round(mem.usedJSHeapSize / 1048576),
-          total: Math.round(mem.totalJSHeapSize / 1048576),
-        });
-      }
-    }
-  }, []);
-
-  return { buildTime, memoryUsage };
-}

@@ -43,10 +43,11 @@ function readCache(userId) {
     const parsed = JSON.parse(raw);
     if (parsed.userId !== userId) return null;
     return parsed; // { userId, blob, synced, cachedAt }
-  } catch (e) { return null; }
+  } catch (e) { console.warn("[Twodew] Local cache read failed (corrupted or unavailable):", e); return null; }
 }
 function writeCache(userId, blob, synced) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ userId, blob, synced, cachedAt: Date.now() })); } catch (e) { /* storage full/unavailable — cache is best-effort */ }
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ userId, blob, synced, cachedAt: Date.now() })); }
+  catch (e) { console.warn("[Twodew] Local cache write failed (storage full/unavailable) — cache is best-effort:", e); }
 }
 // A one-off snapshot taken right before a "Replace" import — separate from CACHE_KEY
 // so an import undo can never be confused with the ordinary sync recovery copy.
@@ -772,7 +773,7 @@ function InboxReview({
 /* ------------------------------------------------------------------ */
 /*  Main app                                                           */
 /* ------------------------------------------------------------------ */
-function AppShell({ userId }) {
+export function AppShell({ userId }) {
   const [projects, setProjects] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -1050,21 +1051,17 @@ function AppShell({ userId }) {
     return () => { supabase.removeChannel(channel); };
   }, [loaded, userId, applyData, buildSnapshot, persist]);
 
-  const update = useCallback((fn) => {
-    setProjects((prev) => { const next = fn(prev); projectsRef.current = next; persist(); return next; });
+  // Factory for the four structurally-identical "update this piece of state, keep its
+  // ref in sync, persist" functions below — differing only in which state/ref pair each
+  // one closes over.
+  const makeUpdater = useCallback((setState, ref) => (fn) => {
+    setState((prev) => { const next = fn(prev); ref.current = next; persist(); return next; });
   }, [persist]);
 
-  const updateInbox = useCallback((fn) => {
-    setInbox((prev) => { const next = fn(prev); inboxRef.current = next; persist(); return next; });
-  }, [persist]);
-
-  const updateNotes = useCallback((fn) => {
-    setNotes((prev) => { const next = fn(prev); notesRef.current = next; persist(); return next; });
-  }, [persist]);
-
-  const updateTemplates = useCallback((fn) => {
-    setTemplates((prev) => { const next = fn(prev); templatesRef.current = next; persist(); return next; });
-  }, [persist]);
+  const update = useCallback(makeUpdater(setProjects, projectsRef), [makeUpdater]);
+  const updateInbox = useCallback(makeUpdater(setInbox, inboxRef), [makeUpdater]);
+  const updateNotes = useCallback(makeUpdater(setNotes, notesRef), [makeUpdater]);
+  const updateTemplates = useCallback(makeUpdater(setTemplates, templatesRef), [makeUpdater]);
 
   // Captures a project's current open task titles/priority/recurring + plain-text notes
   // into a new reusable template — never touches the source project.
@@ -1132,6 +1129,13 @@ function AppShell({ userId }) {
         : p
     )));
   }, [update, updateInbox]);
+  // Read-only counterpart to locateAndPatchTask, for the several call sites that just
+  // need the task itself rather than a patch.
+  const findTaskById = useCallback((taskId) => (
+    inboxRef.current.find((t) => t.id === taskId)
+      || projectsRef.current.flatMap((p) => p.tasks).find((t) => t.id === taskId)
+      || null
+  ), []);
 
   const toggleTaskDone = useCallback((taskId) => {
     // Read the task's *current* state directly from the refs — not from inside the
@@ -1140,8 +1144,7 @@ function AppShell({ userId }) {
     // after calling locateAndPatchTask was landing before the updater had actually run,
     // so bumpCompletionLog fired with a stale/null delta and the Insights counters never
     // moved even though the task's own done flag updated fine on the next render.
-    const current = inboxRef.current.find((t) => t.id === taskId)
-      || projectsRef.current.flatMap((p) => p.tasks).find((t) => t.id === taskId);
+    const current = findTaskById(taskId);
     if (!current) return;
     const today = todayISO();
     const logDelta = !current.done
@@ -1151,7 +1154,7 @@ function AppShell({ userId }) {
       !t.done ? { ...t, done: true, completedAt: Date.now() } : { ...t, done: false, completedAt: null }
     ));
     bumpCompletionLog(logDelta.day, logDelta.delta);
-  }, [locateAndPatchTask, bumpCompletionLog]);
+  }, [locateAndPatchTask, bumpCompletionLog, findTaskById]);
 
   const cycleTaskPriority = useCallback((taskId) => {
     locateAndPatchTask(taskId, (t) => ({ ...t, priority: PRIORITY_CYCLE[t.priority] || "med" }));
@@ -1260,9 +1263,7 @@ function AppShell({ userId }) {
   // Single-task editor (Calendar chip click on a project-less task, or the Today screen's
   // long-press "Edit" — a task can live in the inbox or any project, so lookups/patches go
   // through locateAndPatchTask rather than assuming inbox-only).
-  const editingTask = inbox.find((t) => t.id === editingTaskId)
-    || projects.flatMap((p) => p.tasks).find((t) => t.id === editingTaskId)
-    || null;
+  const editingTask = findTaskById(editingTaskId);
   const editTaskTitle = useCallback((title) => {
     locateAndPatchTask(editingTaskId, (t) => ({ ...t, title }));
   }, [locateAndPatchTask, editingTaskId]);
@@ -1279,11 +1280,10 @@ function AppShell({ userId }) {
     locateAndPatchTask(editingTaskId, (t) => ({ ...t, plannedDate: iso }));
   }, [locateAndPatchTask, editingTaskId]);
   const deleteEditingTask = useCallback(() => {
-    const task = inbox.find((t) => t.id === editingTaskId)
-      || projects.flatMap((p) => p.tasks).find((t) => t.id === editingTaskId);
+    const task = findTaskById(editingTaskId);
     if (task) deleteAnyTaskWithUndo(task);
     setEditingTaskId(null);
-  }, [inbox, projects, editingTaskId]);
+  }, [findTaskById, editingTaskId]);
 
   // Daily reset for recurring tasks — flips done back to false so they reappear tomorrow.
   // Never touches completionLog: that day's completion was already recorded when it happened.
@@ -1427,8 +1427,7 @@ function AppShell({ userId }) {
         if (conflict.remote) {
           locateAndPatchTask(conflict.id, () => conflict.remote);
         } else {
-          const found = inboxRef.current.find((t) => t.id === conflict.id)
-            || projectsRef.current.flatMap((p) => p.tasks).find((t) => t.id === conflict.id);
+          const found = findTaskById(conflict.id);
           if (found) deleteAnyTaskWithUndo(found);
         }
       } else if (conflict.type === "project") {
@@ -1545,8 +1544,7 @@ function AppShell({ userId }) {
   // computeTodayView shows a recurring task regardless of `deadline`, so changing that
   // field has no effect on when it reappears — there's nothing sensible for "defer" to do.
   const deferTask = (taskId, destination) => {
-    const found = inboxRef.current.find((t) => t.id === taskId)
-      || projectsRef.current.flatMap((p) => p.tasks).find((t) => t.id === taskId);
+    const found = findTaskById(taskId);
     if (!found) return;
     const prior = { deadline: found.deadline, startTime: found.startTime, endTime: found.endTime };
     const priorProjectId = projectsRef.current.find((p) => p.tasks.some((t) => t.id === taskId))?.id || null;
@@ -1596,13 +1594,15 @@ function AppShell({ userId }) {
     return true;
   };
   const addStandaloneImageNotes = async (files) => {
+    let failed = 0;
     for (const f of files) {
       if (!f.type.startsWith("image/")) continue;
       try {
         const dataUrl = await imageFileToDataURL(f);
         updateNotes((ns) => [...ns, { id: uid(), text: `<img src="${dataUrl}">`, createdAt: Date.now() }]);
-      } catch (err) { /* unreadable file — skip */ }
+      } catch (err) { failed++; }
     }
+    if (failed) showUndo(`Couldn't add ${failed === 1 ? "an image" : `${failed} images`} — the file may be corrupted or too large.`);
   };
   const deleteNoteGlobalWithUndo = (note) => {
     // Capture the note's home (root list or a specific project) at delete time.
@@ -1685,7 +1685,8 @@ function AppShell({ userId }) {
     // the tab closes before the undo toast is used) and the value the toast's undo
     // button applies directly, so undoing doesn't require a reload.
     const preSnapshot = buildSnapshot();
-    try { localStorage.setItem(PRE_IMPORT_CACHE_KEY, JSON.stringify({ userId, snapshot: preSnapshot, savedAt: Date.now() })); } catch (e) { /* best-effort */ }
+    try { localStorage.setItem(PRE_IMPORT_CACHE_KEY, JSON.stringify({ userId, snapshot: preSnapshot, savedAt: Date.now() })); }
+    catch (e) { console.warn("[Twodew] Pre-import recovery snapshot write failed — the in-session Undo still works, but won't survive a tab close:", e); }
 
     const n = pendingImport.projects.length;
     update(() => pendingImport.projects);
@@ -1993,7 +1994,8 @@ function AppShell({ userId }) {
                 onSaveNote={(id, text) => locateAndPatchNote(id, (n) => ({ ...n, text }))}
                 onDeleteNote={deleteNoteGlobalWithUndo}
                 onDropImages={addStandaloneImageNotes}
-                onCreateTask={(note, prefillTitle) => setNoteToTask({ note, prefillTitle })} />
+                onCreateTask={(note, prefillTitle) => setNoteToTask({ note, prefillTitle })}
+                onImageError={showUndo} />
             )}
             {screen === "calendar" && (
               <CalendarScreen projects={projects} inbox={inbox} isMobile={isMobile}
@@ -2283,6 +2285,7 @@ function AppShell({ userId }) {
                       onSave={(text) => patchProject({ notes: selected.notes.map((x) => (x.id === n.id ? { ...x, text } : x)) })}
                       onDelete={() => deleteNoteWithUndo(n)}
                       onCreateTask={(note, prefillTitle) => setNoteToTask({ note, prefillTitle })}
+                      onImageError={showUndo}
                       touchReorderStart={touchReorderStart}
                       dragProps={{
                         className: `${dragNoteId === n.id || touchDragId === n.id ? "dragging" : ""} ${dragOverNoteId === n.id ? "drag-over" : ""}`,
@@ -2320,7 +2323,7 @@ function AppShell({ userId }) {
         <div className="pd-toast" role="status"
           style={{ bottom: `calc(${kbInset + 24}px + max(0px, env(safe-area-inset-bottom)))` }}>
           <span>{toast.msg}</span>
-          <button onClick={runUndo}>Undo</button>
+          {toast.undo && <button onClick={runUndo}>Undo</button>}
         </div>
       )}
 

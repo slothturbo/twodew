@@ -53,7 +53,7 @@ function handlePlainPaste(e) {
 const PANEL_MIN_H = 240;
 const DEFAULT_PANEL_H = 380;
 
-export function Bubble({ note, color, isMobile, onSave, onDelete, onCreateTask, dragProps, touchReorderStart }) {
+export function Bubble({ note, color, isMobile, onSave, onDelete, onCreateTask, onImageError, dragProps, touchReorderStart }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [panelHeight, setPanelHeight] = useState(DEFAULT_PANEL_H);
@@ -106,14 +106,16 @@ export function Bubble({ note, color, isMobile, onSave, onDelete, onCreateTask, 
   };
 
   const insertImagesIntoPanel = async (files) => {
+    let failed = 0;
     for (const f of files) {
       if (!f.type.startsWith("image/")) continue;
       try {
         const dataUrl = await imageFileToDataURL(f);
         panelRef.current && panelRef.current.focus();
         document.execCommand("insertHTML", false, `<img src="${dataUrl}"><br>`);
-      } catch (e) { /* unreadable image — skip */ }
+      } catch (e) { failed++; }
     }
+    if (failed) onImageError?.(`Couldn't add ${failed === 1 ? "an image" : `${failed} images`} — the file may be corrupted or too large.`);
   };
 
   const handleBubbleDrop = async (e) => {
@@ -121,10 +123,12 @@ export function Bubble({ note, color, isMobile, onSave, onDelete, onCreateTask, 
     if (files.length) {
       e.preventDefault(); e.stopPropagation();
       let html = note.text;
+      let failed = 0;
       for (const f of files) {
-        try { html += `<br><img src="${await imageFileToDataURL(f)}">`; } catch (err) { /* skip */ }
+        try { html += `<br><img src="${await imageFileToDataURL(f)}">`; } catch (err) { failed++; }
       }
       onSave(sanitizeHtml(html));
+      if (failed) onImageError?.(`Couldn't add ${failed === 1 ? "an image" : `${failed} images`} — the file may be corrupted or too large.`);
       dragProps?.onDragEnd?.();
       return;
     }

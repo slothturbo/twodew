@@ -11,7 +11,7 @@ const STANDALONE_COLOR = { fg: "var(--accent)", bg: "rgba(255,90,46,0.07)" };
 /*  No reordering here — order is newest-first; reorder lives on the    */
 /*  per-project view.                                                   */
 /* ------------------------------------------------------------------ */
-export function BrainScreen({ projects, notes, isMobile, onSaveNote, onDeleteNote, onDropImages, onCreateTask }) {
+export function BrainScreen({ projects, notes, isMobile, onSaveNote, onDeleteNote, onDropImages, onCreateTask, onImageError }) {
   const [dragOver, setDragOver] = useState(false);
 
   const allNotes = useMemo(() => [
@@ -47,7 +47,7 @@ export function BrainScreen({ projects, notes, isMobile, onSaveNote, onDeleteNot
               <Bubble note={n} color={n.color} isMobile={isMobile}
                 onSave={(text) => onSaveNote(n.id, text)}
                 onDelete={() => onDeleteNote(n)}
-                onCreateTask={onCreateTask} />
+                onCreateTask={onCreateTask} onImageError={onImageError} />
               <div className="pd-notes-source" style={n.projectName ? { color: n.color.fg } : undefined}>
                 {n.projectName || "note"}
               </div>
